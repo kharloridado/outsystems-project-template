@@ -9,9 +9,9 @@ body:
       label: Files in this handover
       description: List each generated file and its OutSystems destination
       placeholder: |
-        - rnt-button.css        -> Theme CSS
-        - rnt-segmented.js       -> Script resource (Theme Library)
-        - rnt-segmented.css      -> source of the shadow styles (kept in the .js)
+        - acme-button.css        -> Theme CSS
+        - acme-segmented.js       -> Script resource (Theme Library)
+        - acme-segmented.css      -> source of the shadow styles (kept in the .js)
         - Block: Segmented        -> Patterns Library
     validations: { required: true }
   - type: textarea
@@ -19,8 +19,8 @@ body:
     attributes:
       label: OutSystems install checklist
       placeholder: |
-        - [ ] Paste rnt-button.css into Theme CSS
-        - [ ] Import rnt-segmented.js as a Script resource
+        - [ ] Paste acme-button.css into Theme CSS
+        - [ ] Import acme-segmented.js as a Script resource
         - [ ] Create Block "Segmented" with the listed inputs/events/placeholders
         - [ ] Set ExtendedClass on the Button pattern
         - [ ] 1-Click Publish, validate in browser at all breakpoints

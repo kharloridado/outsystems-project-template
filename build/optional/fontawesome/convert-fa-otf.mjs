@@ -17,7 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compress } from "wawoff2";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); // build/optional/fontawesome/ -> repo root
 const outDir = join(root, "vendor", "fontawesome-6", "webfonts");
 
 const MAP = [

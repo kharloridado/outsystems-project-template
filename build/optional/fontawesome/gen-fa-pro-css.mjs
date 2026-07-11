@@ -20,7 +20,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); // build/optional/fontawesome/ -> repo root
 const cssDir = join(root, "vendor", "fontawesome-6", "css");
 const templateFile = join(cssDir, "core-template.css");
 const iconsFile = join(root, "vendor", "fontawesome-6", "metadata", "icons.json");

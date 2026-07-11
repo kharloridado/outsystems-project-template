@@ -23,9 +23,9 @@
  *                                                 gen:fa-css) — geometry: icons[name].svg[style]
  *                                                 = { path, width, height:512 }.
  * Outputs (gitignored dist/ — the paths are LICENSED FA Pro artwork, never committed):
- *   dist/icomoon/loop-fa-solid.selection.json
- *   dist/icomoon/loop-fa-regular.selection.json
- *   dist/icomoon/loop-fa-light.selection.json
+ *   dist/icomoon/${P}fa-solid.selection.json
+ *   dist/icomoon/${P}fa-regular.selection.json
+ *   dist/icomoon/${P}fa-light.selection.json
  *
  * LOSSLESS invariant (no path transform): every FA glyph is 512 tall; widths vary
  * (512/640/448/576/384/320/256/192); ~38% of paths contain arc commands (A/a) whose flags
@@ -40,8 +40,13 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { projectConfig } from "../../lib/project-config.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); // build/optional/fontawesome/ -> repo root
+const cfg = projectConfig();
+const P = cfg.classPrefix;      // e.g. nimbus-  -> nimbus-fa-solid.selection.json
+const NS = cfg.jsNamespace;     // e.g. Nimbus    -> window.NimbusIconData
 const vendorDir = join(root, "vendor", "fontawesome-6");
 const manifestFile = join(vendorDir, "icon-manifest.json");
 const iconsFile = join(vendorDir, "metadata", "icons.json");
@@ -121,7 +126,7 @@ for (const style of STYLES) {
     IcoMoonType: "selection",
     icons: entries,
     height: HEIGHT,
-    metadata: { name: `loop-fa-${style.key}` },
+    metadata: { name: `${P}fa-${style.key}` },
     preferences: {
       showGlyphs: true,
       showQuickUse: true,
@@ -140,9 +145,9 @@ for (const style of STYLES) {
     },
   };
 
-  const outFile = join(outDir, `loop-fa-${style.key}.selection.json`);
+  const outFile = join(outDir, `${P}fa-${style.key}.selection.json`);
   const json = MINIFY ? JSON.stringify(doc) : JSON.stringify(doc, null, 2);
   writeFileSync(outFile, json + "\n");
   const kb = Math.round(json.length / 1024);
-  console.log(`gen:icomoon → dist/icomoon/loop-fa-${style.key}.selection.json (${entries.length} icons, ${skipped} skipped, ${kb}KB)`);
+  console.log(`gen:icomoon → dist/icomoon/${P}fa-${style.key}.selection.json (${entries.length} icons, ${skipped} skipped, ${kb}KB)`);
 }

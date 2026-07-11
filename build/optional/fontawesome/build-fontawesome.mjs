@@ -4,7 +4,7 @@
  * Goal: make the ENTIRE Font Awesome 6 Pro icon set (Solid/Regular/Light — brands not shipped)
  * available in OutSystems ODC and usable as `<i class="fa-solid fa-user"></i>` —
  * self-hosted, exactly like the brand Open Sans faces (typography.css @font-face →
- * /TheLoopTheme/*.woff2, rewritten by ODC at compile time). NOT a CDN/kit dependency.
+ * ${THEME}*.woff2, rewritten by ODC at compile time). NOT a CDN/kit dependency.
  *
  * Source of truth: vendor/fontawesome-6/css/all.css + vendor/fontawesome-6/webfonts/*.woff2.
  * The designer-provided Pro package is the DESKTOP download (no web CSS / webfonts), so
@@ -22,8 +22,8 @@
  *      omits them; this guard stays for safety on future vendor bumps.)
  *   2. STRIP any .ttf fallback from every remaining src — the project ships woff2 only
  *      (matches the Open Sans pattern), so only 3 files travel to ODC Resources.
- *   3. REWRITE url("../webfonts/X.woff2") → url("/TheLoopTheme/X.woff2") — the same ODC
- *      Resources path Open Sans uses; ODC fingerprints it to /TheLoopDesignSystem/ at
+ *   3. REWRITE url("../webfonts/X.woff2") → url("${THEME}X.woff2") — the same ODC
+ *      Resources path Open Sans uses; ODC fingerprints it to <ThemeModule>__<hash>/ at
  *      compile time (see tokens/typography.css; do not "fix" the literal path).
  *
  * Outputs:
@@ -33,16 +33,24 @@
  *   dist/fontawesome.min.css          — minified (lightningcss) for the actual ODC paste.
  *   dist/fontawesome-webfonts/*.woff2 — the 3 files to upload to ODC Resources.
  *   preview/vendor/fontawesome/       — a local-path copy (url → ./webfonts/) so the
- *                                       preview renders icons without the /TheLoopTheme/
+ *                                       preview renders icons without the ${THEME}
  *                                       404 (mirrors the Google-Fonts preview shim).
  *
  * Usage: node build/build-fontawesome.mjs */
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { projectConfig } from "../../lib/project-config.mjs";
 import { execFileSync } from "node:child_process";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+/* This script lives in build/optional/, so the repo root is three levels up — not one.
+ * The ODC theme-module name is a PROJECT value: it names the Resources path the font files
+ * are served from. It comes from project.config.json, never from a literal. */
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const cfg = projectConfig();
+const DS = `${cfg.customer} "${cfg.designSystemName}"`;
+const THEME = `/${cfg.odcThemeModule}/`; // e.g. /NimbusTheme/
+
 const vendorDir = join(root, "vendor", "fontawesome-6");
 const srcCss = join(vendorDir, "css", "all.css");
 const webfontsDir = join(vendorDir, "webfonts");
@@ -95,14 +103,14 @@ function rewriteUrls(css, base) {
 function header(version) {
   return [
     "/*!",
-    ` Font Awesome 6 Pro — full icon set, adapted for WBG "The Loop" / OutSystems ODC.`,
+    ` Font Awesome 6 Pro — full icon set, adapted for ${DS} / OutSystems ODC.`,
     ` Bundled from Font Awesome Pro ${version} (fontawesome.com · Commercial License —`,
     ` licensed asset, do NOT redistribute outside this project).`,
     ` Generated from vendor/fontawesome-6/css/all.css — do not edit directly.`,
     ` Rebuild: npm run gen:fa-css && npm run build:fontawesome.`,
     "",
     ` Self-hosted like the brand Open Sans faces: the 3 woff2 live in ODC Resources and the`,
-    ` literal /TheLoopTheme/*.woff2 src is rewritten by ODC at compile time. Legacy v4/v5`,
+    ` literal ${THEME}*.woff2 src is rewritten by ODC at compile time. Legacy v4/v5`,
     ` @font-face names (incl. 'FontAwesome', which OSUI's Icon widget owns) are excluded so`,
     ` this never clobbers the native icon widget — only the v6 family remains.`,
     "",
@@ -123,8 +131,8 @@ function build() {
   mkdirSync(distWebfonts, { recursive: true });
   mkdirSync(previewWebfonts, { recursive: true });
 
-  // 1) Canonical ODC paste — /TheLoopTheme/ Resource paths.
-  const odcCss = header(version) + rewriteUrls(cleaned, "/TheLoopTheme/");
+  // 1) Canonical ODC paste — ${THEME} Resource paths.
+  const odcCss = header(version) + rewriteUrls(cleaned, THEME);
   const odcFile = join(distDir, "fontawesome.css");
   writeFileSync(odcFile, odcCss + "\n");
 
@@ -143,7 +151,7 @@ function build() {
   // 3) Webfonts to upload to ODC Resources.
   for (const f of WOFF2) copyFileSync(join(webfontsDir, f), join(distWebfonts, f));
 
-  // 4) Preview copy — local ./webfonts/ paths so icons render without the /TheLoopTheme/ 404.
+  // 4) Preview copy — local ./webfonts/ paths so icons render without the ${THEME} 404.
   writeFileSync(join(previewDir, "fontawesome.css"), header(version) + rewriteUrls(cleaned, "./webfonts/") + "\n");
   for (const f of WOFF2) copyFileSync(join(webfontsDir, f), join(previewWebfonts, f));
 
