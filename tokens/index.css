@@ -1,4 +1,26 @@
-/* index.css — entry for build:theme. Bundles to a single flat dist/theme.css. */
+/* index.css — the token manifest and the build:theme entry point.
+ *
+ * ORDER IS LOAD-BEARING. build:theme lifts every file's `:root` into ONE consolidated
+ * block, following this order, so later files win:
+ *
+ *   1. primitives             colors, spacing, typography, radius, border, shadows
+ *   2. semantic role layer    semantic-colors.css — roles that reference the primitives
+ *   3. generated utilities    gen:color-utilities / gen:type-utilities / gen:spacing-utilities
+ *   4. component tokens       component-*.css
+ *   5. OutSystems UI overrides — LAST. outsystems-ui-overrides.css redefines the
+ *      framework's own :root variables to point at this project's tokens, so it must load
+ *      after everything it overrides. This is how the framework renders in the customer's
+ *      brand with no framework edits and no hard-coded values.
+ *
+ * Each file declares its own place in the theme's table of contents with a header:
+ *
+ *     @section Group / Name
+ *
+ * That header is the single place a file registers itself. There is no second table to
+ * keep in sync — the previous build kept one, and half-updating it silently dropped files
+ * out of the shipped theme's index.
+ *
+ * Add token files below as the design system grows. */
 @import "./colors.css";
 @import "./spacing.css";
 @import "./typography.css";

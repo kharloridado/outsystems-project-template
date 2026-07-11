@@ -1,17 +1,57 @@
 {
+  "$comment": [
+    "The allow-list is what lets the unattended loop (loop/run.sh) run WITHOUT",
+    "--dangerously-skip-permissions. Keep it tight and explicit rather than widening it;",
+    "the deny-list is a backstop, not the policy.",
+    "",
+    "defaultMode 'acceptEdits' is a deliberate autonomy choice for the loop: file edits apply",
+    "without a prompt, but every Bash/gh call still has to match the allow-list. Remove it if",
+    "you would rather approve each edit.",
+    "",
+    "The skills and the maker/checker agents are NOT here any more — they are the outsystems-loop",
+    "plugin, so improvements reach every project instead of being copied once and going stale:",
+    "  /plugin marketplace add kharloridado/outsystems-loop",
+    "  /plugin install outsystems-loop@outsystems-loop --scope project"
+  ],
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
-      "Read", "Write", "Edit", "Grep", "Glob",
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Bash(node build/*)",
+      "Bash(npm run check:config)",
       "Bash(npm run build:theme)",
-      "Bash(npm run build:theme:dev)",
-      "Bash(jq:*)",
-      "Bash(git add:*)", "Bash(git commit:*)", "Bash(git switch:*)", "Bash(git checkout:*)", "Bash(git status:*)",
-      "Bash(gh issue create:*)", "Bash(gh issue edit:*)", "Bash(gh label create:*)", "Bash(gh project:*)"
+      "Bash(npm run build:theme:ship)",
+      "Bash(npm run build:osui)",
+      "Bash(npm run gen:*)",
+      "Bash(npm run embed:handover)",
+      "Bash(jq *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git switch *)",
+      "Bash(git checkout *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git push *)",
+      "Bash(gh issue create *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue close *)",
+      "Bash(gh issue list *)",
+      "Bash(gh label create *)",
+      "Bash(gh project *)",
+      "Bash(cat *)",
+      "Bash(ls *)"
     ],
     "deny": [
-      "Bash(rm -rf:*)",
-      "Bash(git push --force:*)",
-      "Bash(gh repo delete:*)"
+      "Bash(rm *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Bash(gh repo delete *)"
     ]
   },
   "hooks": {

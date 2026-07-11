@@ -2,3 +2,11 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# Session-approved, machine-specific permissions — never share these.
+.claude/settings.local.json
+
+# Licensed vendor assets (icon-font metadata, vector artwork). See vendor/LICENSING.md.
+# These are paid assets: do not commit or redistribute them. One such metadata file
+# also exceeds GitHub's 100MB file limit.
+vendor/**/metadata/

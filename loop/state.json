@@ -1,23 +1,34 @@
 {
+  "_schema_note": "The loop's durable memory. Empty skeleton: fill from loop/goal.md on the first run. Item and finding shapes are documented in loop/README.md. `tiers` is a PROJECT-CONFIGURABLE list, not a fixed taxonomy — add or rename tiers to match this project's dependency graph, and keep `current_tier` pointing at one of them. Reconcile this file against git before advancing (see the pre-flight in loop/README.md).",
+
   "goal": "",
-  "figma_url": "",
+  "figma_url": "<<FIGMA_URL>>",
+  "figma_file_key": "<<FIGMA_FILE_KEY>>",
   "branch": "",
   "status": "pending",
   "mode": "single",
-  "project": { "owner": "", "number": 0 },
+  "phase": "",
+
+  "project": { "owner": "", "number": 0, "id": "", "title": "" },
+  "repo": "<<OWNER/REPO>>",
+
   "caps": {
     "max_rounds_per_item": 3,
     "max_global_iterations": 500,
     "budget_note": "raise/lower for library-scale runs; a full library is hundreds of items"
   },
+
   "checkpoints": {
     "after_tokens": "pause",
     "after_primitives": "pause",
     "after_composites": "continue"
   },
+
   "iteration": 0,
+
   "tiers": ["foundations", "primitives", "composites", "patterns"],
   "current_tier": "foundations",
+
   "items": [],
   "findings": [],
   "handover_epics": [],

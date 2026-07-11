@@ -1,0 +1,28 @@
+{
+  "$comment": [
+    "Maps each handover/<artifact>.md to the source file(s) whose contents get embedded into its",
+    "'## Code to paste into ODC' section by `npm run embed:handover` (idempotent — re-run after",
+    "editing a source file).",
+    "",
+    "The project rule this serves: a handover ticket must CONTAIN the JS/CSS the developer pastes",
+    "into ODC — not just point at a repo path. A dev working inside ODC Studio cannot follow a link",
+    "into a repo they don't have open.",
+    "",
+    "Entry shape — either a plain file list:",
+    "  \"acme-button.md\": [[\"src/blocks/acme-button.css\", \"css\", \"Theme CSS — paste below OutSystems UI\"]]",
+    "",
+    "…or an object that also pins a fully-filled Mentor Studio prompt:",
+    "  \"acme-toast.md\": {",
+    "    \"files\": [[\"src/components/acme-toast.js\", \"js\", \"Script resource\"]],",
+    "    \"mentor\": { \"kind\": \"web-component\", \"helper\": \"window.AcmeToast\", \"block\": \"Toast\" }",
+    "  }",
+    "",
+    "`mentor.kind` is one of: web-component | block | restyle. When `mentor` is omitted the prompt",
+    "is derived from the artifact kind automatically.",
+    "",
+    "Tokens are NOT listed here — they travel once via dist/theme.css, which is its own paste.",
+    "",
+    "Add an entry for every new handover. A handover with no entry gets no embedded code, and the",
+    "embed silently goes stale when its source changes — so keep this in sync (the build warns)."
+  ]
+}

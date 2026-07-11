@@ -1,0 +1,151 @@
+#!/usr/bin/env node
+/* init-project.mjs — fill in the template ONCE, in one place, for a new engagement.
+ *
+ * Asks for the handful of values that actually differ between projects, writes them
+ * into project.config.json, and substitutes every <<PLACEHOLDER>> across the scaffold
+ * docs. After this runs, `npm run check:config` passes and the build works.
+ *
+ * The whole point: you answer each question exactly once. The previous template made
+ * you hand-edit the same value into several files, which is how it ended up shipping a
+ * class prefix that two config files disagreed about for the life of the project.
+ *
+ * Note the deliberate refusal to guess. Conventions (spacing base, grid, breakpoints,
+ * default size) default to status "TBD" — NOT to a plausible value. An unverified
+ * convention that looks confirmed is worse than an obviously empty one: the loop will
+ * enforce it, flag every value that "violates" it, and hand a human a queue of findings
+ * that get closed as not-planned.
+ *
+ * Usage:  npm run init   (re-runnable; shows current values as defaults) */
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { join, relative } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { stdin, stdout } from "node:process";
+import { root } from "./lib/project-config.mjs";
+
+const CONFIG = join(root, "project.config.json");
+const SCAN_DIRS = ["", "loop", "handover", "findings", "design", "docs", "style-guide", "tokens", "src", "preview"];
+const SCAN_EXT = /\.(md|json|css|js|html|sh)$/;
+
+/* Flags let this run non-interactively (CI, scripted bootstrap, a test harness):
+ *   node build/init-project.mjs --customer="Acme Corp" --prefix=nimbus- --repo=acme/ds
+ * Anything not passed as a flag is prompted for. */
+const flags = Object.fromEntries(
+  process.argv.slice(2)
+    .filter((a) => a.startsWith("--"))
+    .map((a) => {
+      const [k, ...v] = a.slice(2).split("=");
+      return [k, v.join("=")];
+    })
+);
+const interactive = stdin.isTTY;
+const rl = interactive ? createInterface({ input: stdin, output: stdout }) : null;
+
+const ask = async (q, def, flag) => {
+  if (flag && flags[flag] !== undefined) return flags[flag];
+  if (!rl) {
+    if (def) return def;
+    throw new Error(
+      `Non-interactive run is missing --${flag}.\n` +
+        `Pass every value as a flag, or run \`npm run init\` from a terminal.`
+    );
+  }
+  const a = (await rl.question(def ? `${q} [${def}]: ` : `${q}: `)).trim();
+  return a || def || "";
+};
+
+console.log(`
+Initialise this OutSystems design-system project.
+Answer once — these values are written everywhere they are needed.
+`);
+
+const cfg = JSON.parse(readFileSync(CONFIG, "utf8"));
+const has = (v) => v && !/^<<.*>>$/.test(v);
+
+const customer = await ask("Customer (e.g. Acme Corp)", has(cfg.customer) ? cfg.customer : "", "customer");
+const project = await ask("Project short name (e.g. ACME)", has(cfg.project) ? cfg.project : "", "project");
+const dsName = await ask("Design system name (e.g. Nimbus)", has(cfg.designSystemName) ? cfg.designSystemName : project, "design-system");
+
+let prefix = await ask("CSS class prefix, lowercase + trailing hyphen (e.g. nimbus-)", has(cfg.classPrefix) ? cfg.classPrefix : "", "prefix");
+while (!/^[a-z][a-z0-9]*-$/.test(prefix) || prefix === "acme-") {
+  const why = prefix === "acme-"
+    ? '"acme-" is the template\'s own example prefix — pick a real one for this project.'
+    : 'The prefix must be lowercase and end with a hyphen, e.g. "nimbus-".';
+  if (!rl) throw new Error(`Invalid --prefix "${prefix}". ${why}`);
+  console.log(`  ${why}`);
+  prefix = await ask("CSS class prefix", "");
+}
+
+const nsDefault = prefix.replace(/-$/, "").replace(/(^|[-_])(\w)/g, (_, __, c) => c.toUpperCase());
+const jsNs = await ask(`JS namespace for Web Component helpers, window.<Ns>Toast (e.g. ${nsDefault})`, has(cfg.jsNamespace) ? cfg.jsNamespace : nsDefault, "js-namespace");
+const themeModule = await ask("ODC theme module name (used for self-hosted font paths, e.g. NimbusTheme)", has(cfg.odcThemeModule) ? cfg.odcThemeModule : "", "theme-module");
+const repo = await ask("GitHub repo (owner/repo)", has(cfg.repo) ? cfg.repo : "", "repo");
+const figmaUrl = await ask("Figma library URL (blank if not yet known)", has(cfg.figma?.url) ? cfg.figma.url : "", "figma-url");
+const figmaKey = figmaUrl.match(/(?:file|design)\/([A-Za-z0-9]+)/)?.[1] ?? "";
+
+console.log(`
+Conventions (spacing base, grid, breakpoints, default component size) start as "TBD"
+on purpose. Do NOT guess them. Promote one to "confirmed" in project.config.json only
+once the designer or brand owner has actually confirmed it — the checker enforces a
+convention only when it is confirmed, and raises findings against it only then.
+`);
+
+Object.assign(cfg, {
+  customer, project,
+  designSystemName: dsName,
+  classPrefix: prefix,
+  jsNamespace: jsNs,
+  odcThemeModule: themeModule,
+  repo,
+  figma: { fileKey: figmaKey || "<<FIGMA_FILE_KEY>>", url: figmaUrl || "<<FIGMA_URL>>" },
+});
+cfg.findings.ticketTarget = repo;
+writeFileSync(CONFIG, JSON.stringify(cfg, null, 2) + "\n");
+
+/* Substitute the same values across the scaffold docs. */
+const SUBS = {
+  "<<CUSTOMER>>": customer,
+  "<<PROJECT>>": project,
+  "<<DESIGN_SYSTEM_NAME>>": dsName,
+  "<<CLASS_PREFIX>>": prefix,
+  "<<JS_NAMESPACE>>": jsNs,
+  "<<ODC_THEME_MODULE>>": themeModule,
+  "<<OWNER/REPO>>": repo,
+  "<<FIGMA_URL>>": figmaUrl,
+  "<<FIGMA_FILE_KEY>>": figmaKey,
+};
+
+let touched = 0;
+const skipDir = new Set(["node_modules", "vendor", "dist", ".git"]);
+function walk(dir, depth = 0) {
+  for (const entry of readdirSync(dir)) {
+    if (skipDir.has(entry) || entry.startsWith(".")) continue;
+    const p = join(dir, entry);
+    if (statSync(p).isDirectory()) { if (depth < 3) walk(p, depth + 1); }
+    else if (SCAN_EXT.test(entry)) substitute(p);
+  }
+}
+function substitute(path) {
+  const before = readFileSync(path, "utf8");
+  let after = before;
+  for (const [k, v] of Object.entries(SUBS)) if (v) after = after.split(k).join(v);
+  if (after !== before) {
+    writeFileSync(path, after);
+    console.log(`  updated ${relative(root, path).replace(/\\/g, "/")}`);
+    touched++;
+  }
+}
+for (const d of SCAN_DIRS) { const p = join(root, d); if (existsSync(p)) walk(p); }
+
+await rl?.close();
+console.log(`
+Done — ${touched} file(s) updated.
+
+Next:
+  1. npm run check:config        # must pass; it is part of the build gate
+  2. git submodule update --init # vendor/outsystems-ui — then pin it to your ODC env's version
+  3. ./.github/setup-finding-labels.sh ${repo || "<owner/repo>"}
+  4. ./.github/setup-project.sh  <owner> ${repo || "<owner/repo>"} "Design System v1"
+  5. fill in design/brand-guidelines.md + design/figma-links.md
+  6. set the goal + the SIGNED-OFF component inventory in loop/goal.md
+  7. /outsystems-loop:design-loop
+`);

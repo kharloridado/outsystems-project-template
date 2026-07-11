@@ -1,14 +1,30 @@
 {
   "name": "outsystems-project-template",
-  "version": "1.0.0",
-  "description": "OutSystems frontend project scaffold — lightningcss theme pipeline + findings workflow",
+  "version": "0.1.0",
+  "description": "OutSystems frontend project scaffold — theme pipeline, preview harness, findings + handover workflow. Behavior lives in the outsystems-loop Claude Code plugin.",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build:theme": "lightningcss --bundle --targets '>= 0.25%' tokens/index.css -o dist/theme.css",
-    "build:theme:dev": "lightningcss --bundle tokens/index.css -o dist/theme.css",
-    "watch:theme": "lightningcss --bundle --watch tokens/index.css -o dist/theme.css"
+    "init": "node build/init-project.mjs",
+    "check:config": "node build/check-config.mjs",
+
+    "build:theme": "npm run check:config && node build/build-theme.mjs && node build/validate-theme.mjs",
+    "build:theme:ship": "npm run check:config && node build/build-theme.mjs --ship && node build/validate-theme.mjs",
+    "validate:theme": "node build/validate-theme.mjs",
+    "build:theme:min": "lightningcss --bundle --minify --targets \">= 0.25%\" tokens/index.css -o dist/theme.min.css",
+    "watch:theme": "node build/build-theme.mjs --watch",
+
+    "gen:color-utilities": "node build/gen-color-utilities.mjs",
+    "gen:type-utilities": "node build/gen-type-utilities.mjs",
+    "gen:spacing-utilities": "node build/gen-spacing-utilities.mjs",
+
+    "build:osui": "node build/build-osui.mjs",
+    "preview": "node build/preview-server.mjs",
+
+    "embed:handover": "node build/embed-handover-code.mjs"
   },
   "devDependencies": {
-    "lightningcss-cli": "^1.0.0"
+    "lightningcss-cli": "^1.30.1",
+    "sass": "^1.83.0"
   }
 }

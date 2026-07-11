@@ -1,0 +1,3 @@
+[submodule "vendor/outsystems-ui"]
+	path = vendor/outsystems-ui
+	url = https://github.com/OutSystems/outsystems-ui.git

@@ -1,4 +1,20 @@
-/* spacing.css — 4pt base scale (OutSystems UI standard naming) */
+/* @section Spacing / Scale
+ *
+ * spacing.css — the spacing scale, extracted from the design source.
+ *
+ * DO NOT declare a base grid here unless the designer has actually confirmed one. A
+ * scale is not a grid, and a scale that happens to be mostly multiples of 4 is not a
+ * "4pt grid".
+ *
+ * This file used to open with the comment "4pt base scale". Nobody had verified that.
+ * The loop believed it, dutifully flagged every value that wasn't a multiple of 4, and
+ * produced a batch of findings that were all closed as not-planned. A credible-looking
+ * default is worse than a blank.
+ *
+ * When the grid IS confirmed, record it in project.config.json:
+ *     "spacingBase": { "value": "4px", "status": "confirmed" }
+ * Only then does the checker enforce it, and only then may an off-grid finding be
+ * raised. Until then its status stays "TBD". See build/check-config.mjs. */
 :root {
   --space-none: 0;
   --space-xs: 4px;

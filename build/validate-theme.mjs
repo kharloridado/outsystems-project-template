@@ -1,0 +1,129 @@
+#!/usr/bin/env node
+/* validate-theme.mjs — make the deterministic gate actually deterministic.
+ *
+ * The @checker treats `npm run build:theme` exiting 0 as a HARD WALL: proof that the
+ * tree builds before any subjective review happens. That claim was false. build-theme.mjs
+ * is a text assembler — it concatenates and re-sections CSS, it never parses it. An
+ * unbalanced brace in a token file produced a corrupt dist/theme.css and still exited 0,
+ * so a broken theme could sail through the gate and get reviewed as if it were fine.
+ *
+ * This closes that hole. Two checks, both mechanical, both un-reasoned-past:
+ *
+ *   1. SYNTAX — parse the assembled theme with lightningcss. A parse error is a build
+ *      failure, full stop.
+ *   2. SCHEMA — every var(--token) reference resolves to a definition (or carries an
+ *      explicit fallback). A dangling var() is silently invalid at runtime: the property
+ *      just doesn't apply, and the component renders subtly wrong with no error anywhere.
+ *
+ * Usage:  node build/validate-theme.mjs      (runs as part of npm run build:theme) */
+import { readFileSync, existsSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import { root } from "./lib/project-config.mjs";
+
+const themeFile = join(root, "dist", "theme.css");
+const css = readFileSync(themeFile, "utf8");
+const errors = [];
+
+/* ---- 1a. structure: balanced braces + terminated comments ------------------------ */
+/* Done by hand, and FIRST, because a CSS parser will not catch this for us. lightningcss
+ * treats a custom property's value as an opaque token stream, so `--x: ` left dangling by
+ * an unbalanced brace parses "fine" — the corruption only shows up as silently missing
+ * rules at runtime. Since build-theme.mjs is a text assembler that concatenates files, an
+ * unterminated comment or a stray brace in ONE token file is the single most likely way to
+ * corrupt the whole theme. That is precisely the failure the deterministic gate exists to
+ * catch, so we check it explicitly rather than hoping the parser complains. */
+function checkStructure(s) {
+  let depth = 0;
+  let line = 1;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "\n") { line++; continue; }
+    if (s[i] === "/" && s[i + 1] === "*") {
+      const end = s.indexOf("*/", i + 2);
+      if (end === -1) return `unterminated comment opened at dist/theme.css:${line}`;
+      line += s.slice(i, end).split("\n").length - 1;
+      i = end + 1;
+      continue;
+    }
+    if (s[i] === "{") depth++;
+    else if (s[i] === "}" && --depth < 0) return `unexpected "}" at dist/theme.css:${line}`;
+  }
+  if (depth > 0) return `${depth} unclosed "{" — a block is never closed (check the token files for a stray brace)`;
+  return null;
+}
+
+const structural = checkStructure(css);
+if (structural) errors.push(`dist/theme.css is structurally broken: ${structural}`);
+
+/* ---- 1b. syntax: parse it for real ----------------------------------------------- */
+/* Call the lightningcss binary directly out of node_modules/.bin — going through `npx`
+ * spawns unreliably on Windows (EINVAL), and a validator that errors on a HEALTHY tree is
+ * worse than no validator at all: it trains you to ignore it.
+ *
+ * NO `--targets` in the argument list: a browserslist query like ">= 0.25%" contains `>=`,
+ * which cmd.exe reads as a REDIRECTION operator — that mangled the command and failed a
+ * perfectly healthy theme. Targets are a codegen concern; parsing is all we need here. */
+const isWin = process.platform === "win32";
+const bin = join(root, "node_modules", ".bin", isWin ? "lightningcss.cmd" : "lightningcss");
+
+if (!existsSync(bin)) {
+  console.warn(
+    "validate:theme — lightningcss not installed, skipping the parse check (run `npm install`).\n" +
+      "                 The structural and token-schema checks still ran."
+  );
+} else if (!structural) {
+  const probe = join(root, "dist", ".validate-probe.css");
+  // `cmd.exe /c` rather than { shell: true }: same effect, without Node's DEP0190 warning
+  // firing on every single build.
+  const [cmd, args] = isWin
+    ? ["cmd.exe", ["/c", bin, themeFile, "-o", probe]]
+    : [bin, [themeFile, "-o", probe]];
+  try {
+    execFileSync(cmd, args, { stdio: ["ignore", "ignore", "pipe"], cwd: root });
+  } catch (err) {
+    const detail = (err.stderr?.toString() || err.message).trim();
+    errors.push(`dist/theme.css does not parse as valid CSS:\n\n${detail}`);
+  } finally {
+    rmSync(probe, { force: true });
+  }
+}
+
+/* ---- 2. token schema ------------------------------------------------------------ */
+/* Strip comments first: a commented-out example like `var(--not-real)` is not a usage. */
+const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+const defined = new Set([...code.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+
+/* A usage only counts as dangling when it has NO fallback — `var(--x, 8px)` is a
+ * documented fallback chain and is legitimate (Web Components rely on it). */
+const dangling = new Map();
+for (const m of code.matchAll(/var\(\s*(--[\w-]+)\s*([,)])/g)) {
+  const [, name, next] = m;
+  if (next === ")" && !defined.has(name)) {
+    const line = code.slice(0, m.index).split("\n").length;
+    if (!dangling.has(name)) dangling.set(name, line);
+  }
+}
+
+if (dangling.size) {
+  const list = [...dangling.entries()]
+    .slice(0, 15)
+    .map(([name, line]) => `      ${name}  (first used at dist/theme.css:${line})`)
+    .join("\n");
+  errors.push(
+    `${dangling.size} token reference(s) resolve to nothing and have no fallback:\n\n${list}` +
+      `${dangling.size > 15 ? `\n      … and ${dangling.size - 15} more` : ""}\n\n` +
+      `    A dangling var() fails silently at runtime — the declaration is simply dropped and the\n` +
+      `    component renders subtly wrong with no error. Define the token, or give the reference an\n` +
+      `    explicit fallback:  var(--x, <value>).`
+  );
+}
+
+/* ---- report ---------------------------------------------------------------------- */
+if (errors.length) {
+  console.error(`\nvalidate:theme FAILED — the deterministic gate is a hard wall.\n`);
+  errors.forEach((e) => console.error(`  ✗ ${e}\n`));
+  process.exit(1);
+}
+
+console.log(`validate:theme → ok (${defined.size} tokens defined, all references resolve)`);

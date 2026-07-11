@@ -1,4 +1,10 @@
-/* typography.css — type scale + weights */
+/* @section Typography / Type */
+/* typography.css — type scale + weights.
+ *
+ * A type ramp is often DEVICE-RESPONSIVE in the design source: the same token name can
+ * resolve to a different size on desktop / tablet / mobile. That axis is usually invisible
+ * on the design system's type page and only shows up in a component's example frames.
+ * If a size is mode-bound, emit per-device tokens — do not freeze one device's value here. */
 :root {
   --font-family-base: system-ui, sans-serif; /* TODO: brand font */
   --font-weight-regular: 400;

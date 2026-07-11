@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><<DESIGN_SYSTEM_NAME>> — Component Preview</title>
+
+<!--
+  THE LOCAL PREVIEW HARNESS.
+
+  Serve it with `npm run preview` (http://127.0.0.1:8088) and validate in a REAL BROWSER.
+  Never trust Service Studio Preview for Web Components — that is hard rule #2.
+
+  LOAD ORDER MIRRORS ODC EXACTLY. That is the whole point of this file: if the order here
+  does not match what the platform does, the preview lies to you.
+
+    1) Real OutSystems UI framework base — the vendored submodule compiled by
+       `npm run build:osui`. This is the SAME framework CSS ODC ships, so fidelity gets
+       checked against the real base rather than an approximation. (The first version of
+       this harness used a hand-written "native baseline" stub. It had to be ripped out:
+       a stub agrees with whatever you already assumed.)
+    2) Brand theme tokens — dist/theme.css, which retints OutSystems UI's own CSS
+       variables. Build with `npm run build:theme`.
+    3) Provider stylesheets — anything the platform injects at runtime (date pickers,
+       select widgets…). Vendor them under preview/vendor/ so the preview sees the same
+       DOM and the same specificity the provider actually emits.
+    4) Your block overrides — src/blocks/*.css. In ODC these are pasted into the Theme
+       BELOW OutSystems UI, so they load LAST and win equal-specificity rules by source
+       order. Where a real framework rule has HIGHER specificity and your override does
+       not win, that is a genuine fidelity finding to surface — which is exactly why this
+       harness sits on the real framework instead of a stub.
+
+  ───────────────────────────────────────────────────────────────────────────────────────
+  RULE: every file you add to src/blocks/index.css must ALSO get a <link> below.
+  A block whose CSS never loads here will pass its preview and break in production. That
+  has happened. The checker's deterministic gate asserts it now — keep the two lists in
+  step as you build.
+  ───────────────────────────────────────────────────────────────────────────────────────
+
+  RULE: this page's own chrome stays TOKEN-ONLY and CLASS-ONLY. No inline style attributes,
+  no ad-hoc hex. If you need a value it comes from a var(--token). A preview that cheats
+  cannot tell you whether the tokens are right.
+-->
+
+<!-- 1) Real OutSystems UI framework base. Regenerate with `npm run build:osui`. -->
+<link rel="stylesheet" href="vendor/outsystems-ui/outsystems-ui.css">
+
+<!-- 2) Brand theme tokens. Regenerate with `npm run build:theme`. -->
+<link rel="stylesheet" href="../dist/theme.css">
+
+<!-- 3) Provider stylesheets (runtime-injected in ODC). Vendor them here as you adopt them.
+     <link rel="stylesheet" href="vendor/.../provider.css"> -->
+
+<!-- 4) Block overrides — one <link> per file in src/blocks/index.css.
+     <link rel="stylesheet" href="../src/blocks/BLOCK.css"> -->
+
+</head>
+<body>
+
+  <header class="padding-base">
+    <h1><<DESIGN_SYSTEM_NAME>></h1>
+    <p>Local component preview — real OutSystems UI base, brand theme, block overrides.</p>
+  </header>
+
+  <main class="padding-base">
+
+    <section>
+      <h2>Getting started</h2>
+      <ol>
+        <li><code>git submodule update --init</code> — then pin <code>vendor/outsystems-ui</code>
+            to the OutSystems UI version your target ODC environment actually runs.</li>
+        <li><code>npm run build:osui</code> — compile the framework base (layer 1).</li>
+        <li><code>npm run build:theme</code> — build the brand theme (layer 2).</li>
+        <li><code>npm run preview</code> — serve this page and check it in a real browser.</li>
+      </ol>
+      <p>
+        Add a specimen section per component as you build it. Restyle the native widget
+        wherever the framework already has one: drop the real widget markup in, give it your
+        <code>ExtendedClass</code>, and confirm the override actually wins.
+      </p>
+    </section>
+
+    <section>
+      <h2>Specimens</h2>
+      <!-- One section per component. Use the REAL rendered widget markup captured in
+           outsystems-widgets-reference/ — not an idealised approximation of it. The
+           vendored SCSS can be stale; the rendered DOM is the truth. -->
+      <p><em>No components built yet.</em></p>
+    </section>
+
+  </main>
+
+  <!-- Web Components (L5 only — the last resort, not the default):
+       <script type="module" src="../src/components/COMPONENT.js"></script> -->
+
+</body>
+</html>

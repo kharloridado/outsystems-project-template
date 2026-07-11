@@ -1,0 +1,34 @@
+{
+  "$comment": "The single source of truth for this project's values. Build scripts read it via build/lib/project-config.mjs; the maker/checker agents read it directly. Nothing else should restate these values. Run `npm run init` to fill it in.",
+
+  "customer": "<<CUSTOMER>>",
+  "project": "<<PROJECT>>",
+  "designSystemName": "<<DESIGN_SYSTEM_NAME>>",
+  "classPrefix": "<<CLASS_PREFIX>>",
+  "jsNamespace": "<<JS_NAMESPACE>>",
+  "odcThemeModule": "<<ODC_THEME_MODULE>>",
+  "repo": "<<OWNER/REPO>>",
+  "environment": "ODC",
+
+  "figma": {
+    "fileKey": "<<FIGMA_FILE_KEY>>",
+    "url": "<<FIGMA_URL>>"
+  },
+
+  "conventions": {
+    "$comment": "THREE-STATE, never a bare value. status: confirmed | assumed | TBD. A convention that is not `confirmed` is NOT A RULE: the checker must not enforce it and must not raise findings against it. This exists because a previous template shipped `Spacing base: 4pt` as a plausible default nobody had verified — the loop then flagged every value that wasn't a multiple of 4, manufacturing false-positive findings and a bug that had to be closed as not-planned. A credible-looking default is worse than a blank. Promote to `confirmed` only when the designer or brand owner has actually said so.",
+    "spacingBase": { "value": null, "status": "TBD" },
+    "grid": { "value": null, "status": "TBD" },
+    "breakpoints": { "value": null, "status": "TBD" },
+    "defaultComponentSize": { "value": null, "status": "TBD" }
+  },
+
+  "knownFalsePositiveClasses": [],
+
+  "findings": {
+    "ticketing": "github",
+    "ticketTarget": "<<OWNER/REPO>>",
+    "slackChannel": null,
+    "gate": "high+"
+  }
+}

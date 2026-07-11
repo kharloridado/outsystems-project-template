@@ -1,0 +1,18 @@
+/* index.css — the block-override manifest.
+ *
+ * build:theme appends these to dist/theme.css in the order listed here, AFTER the
+ * consolidated :root. Each file declares its own section with an `@section` header:
+ *
+ *     /* @section Widget Overrides / Button *\/
+ *
+ * That header is the ONLY place a file's section is registered. (The previous build
+ * kept a separate META lookup table, so every new file had to be added in two places —
+ * and half-doing it silently dropped the file out of the theme's table of contents.)
+ *
+ * Two rules worth repeating here, because both have cost real rework:
+ *   1. Restyle the NATIVE widget. Override `.btn`, `.card`, `.dropdown` — do not build a
+ *      parallel `<<CLASS_PREFIX>>button` system alongside the framework's own.
+ *   2. Every file you add here must ALSO be <link>ed in preview/index.html. A block whose
+ *      CSS never loads in the preview will pass review and break in production.
+ *
+ * Add imports below as you build. */
