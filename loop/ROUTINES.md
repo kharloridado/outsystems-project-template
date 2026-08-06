@@ -52,6 +52,30 @@ Make NO changes to any issue.
 
 ---
 
+## 4. Live-theme drift check  (guards the manual ODC paste)
+**Trigger:** weekdays, early morning in the team's timezone.
+**What it runs:** `npm run check:live-theme` (`build/check-live-theme.mjs`) — fetches the live compiled theme from the two stable, un-fingerprinted paste URLs configured in `project.config.json`'s `odc` block, rebuilds `dist/tokens.css` + `dist/theme.css` from `tokens/` at HEAD, normalizes both sides (comments, ODC's minification, url fingerprints) and diffs token-by-token + rule-by-rule.
+
+**Why this one is worth a schedule.** Everything else in this pipeline guards code that deploys itself. The theme is *carried across by hand* into the ODC Theme editor, so it is the one deliverable that can silently stop matching the repo — a token change built and committed but never re-pasted, or an edit made straight in ODC that exists in no branch. Nothing else in the loop would ever notice.
+
+**Exit contract:** `0` in sync (report only, no issue) · `1` drift (file/refresh the drift issue) · `2` live theme unreachable (file a check-failure issue — **a rotated or broken URL must never fail silently**, or the check reports "fine" forever). Until the `odc` block is filled in it exits `0` with "not configured".
+
+**Dedup:** keep ONE open issue labeled `theme-drift` at a time — comment fresh reports onto it instead of opening a duplicate every weekday.
+
+**Prompt:**
+```
+Run `npm run check:live-theme` in this repo and read its exit code.
+- exit 0: report only. Do NOT open or comment on any issue.
+- exit 1: drift. If an open issue labeled `theme-drift` exists, comment the report
+  onto it; otherwise open one (labels: theme-drift) with the report as the body.
+- exit 2: the live theme could not be fetched. Open (or comment on) a `theme-drift`
+  issue saying the check itself failed and the URL may have rotated — this must not
+  pass silently.
+Make no code changes and do not re-paste anything into ODC. End with a 3-line summary.
+```
+
+---
+
 ## Which scheduler for which job
 
 - **Routines (cloud):** the loop, token reconciliation, digests — anything that should run with your laptop closed. Start here.

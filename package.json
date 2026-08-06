@@ -11,6 +11,7 @@
     "build:theme": "npm run check:config && node build/build-theme.mjs && node build/validate-theme.mjs",
     "build:theme:ship": "npm run check:config && node build/build-theme.mjs --ship && node build/validate-theme.mjs",
     "validate:theme": "node build/validate-theme.mjs",
+    "check:live-theme": "node build/check-live-theme.mjs",
     "build:theme:min": "lightningcss --bundle --minify --targets \">= 0.25%\" tokens/index.css -o dist/theme.min.css",
     "watch:theme": "node build/build-theme.mjs --watch",
 

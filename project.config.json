@@ -15,6 +15,14 @@
     "url": "<<FIGMA_URL>>"
   },
 
+  "odc": {
+    "$comment": "Where the LIVE theme is served, so `npm run check:live-theme` can prove the hand-pasted ODC theme still matches this repo. Deliberately `null` rather than a substitutable placeholder: the environment does not exist on day one, and a scaffold that fails its build over a URL nobody could have filled in yet trains people to ignore the gate. While these are null the check exits 0 with 'not configured'. Fill them in after the theme is first published — the URL pattern is <environmentUrl>/<appModule>/css/<odcThemeModule>.<themeName>.css. Use the STABLE, un-fingerprinted URLs; a URL that changes every publish makes the check a chore and it gets switched off.",
+    "environmentUrl": null,
+    "appModule": null,
+    "tokensThemeName": null,
+    "themeName": null
+  },
+
   "conventions": {
     "$comment": "THREE-STATE, never a bare value. status: confirmed | assumed | TBD. A convention that is not `confirmed` is NOT A RULE: the checker must not enforce it and must not raise findings against it. This exists because a previous template shipped `Spacing base: 4pt` as a plausible default nobody had verified — the loop then flagged every value that wasn't a multiple of 4, manufacturing false-positive findings and a bug that had to be closed as not-planned. A credible-looking default is worse than a blank. Promote to `confirmed` only when the designer or brand owner has actually said so.",
     "spacingBase": { "value": null, "status": "TBD" },

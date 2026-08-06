@@ -43,7 +43,7 @@ npm run check:config  # the drift guard; runs inside build:theme too
 git submodule update --init          # then pin vendor/outsystems-ui to your ODC env's version
 ./.github/setup-finding-labels.sh <owner>/<repo>
 ./.github/setup-project.sh <owner> <owner>/<repo> "<board name>"
-npm run build:theme   # → dist/theme.css, paste into the ODC Theme editor
+npm run build:theme   # → dist/tokens.css + dist/theme.css, paste BOTH into the ODC Theme editor
 npm run preview       # local Live Style Guide harness in a real browser
 ```
 
@@ -80,7 +80,8 @@ credible-looking default is worse than a blank.
 │   ├── lib/project-config.mjs   # the ONE reader of project.config.json
 │   ├── check-config.mjs         # drift guard; first step of build:theme
 │   ├── init-project.mjs         # npm run init
-│   ├── build-theme.mjs          # tokens/*.css → dist/theme.css (TOC, single :root)
+│   ├── build-theme.mjs          # tokens/*.css → dist/tokens.css + dist/theme.css (TOC, single :root)
+│   ├── check-live-theme.mjs     # diff the LIVE ODC theme vs a fresh local build
 │   ├── gen-*-utilities.mjs      # generated color/type/spacing utility classes
 │   ├── embed-handover-code.mjs  # embeds the real CSS/JS into handover/*.md
 │   └── optional/fontawesome/    # OPT-IN add-on: self-hosted licensed icon font
@@ -98,12 +99,13 @@ credible-looking default is worse than a blank.
 ├── loop/                     # goal.md, state.json, refs/ (frozen Figma specs), run.sh, REPORT.md
 ├── handover/                 # handover issue bodies — with the code to paste embedded verbatim
 ├── findings/                 # findings-register.md + ticket payloads
+├── src/assets/               # authored SVGs etc. destined for ODC Theme Resources (source, not dist)
 ├── docs/
 │   ├── LESSONS.md            # what this pipeline learned the hard way; read before "improving" it
 │   └── meetings/             # notes (decisions must be distilled into the active files)
 ├── .github/                  # issue forms + setup-finding-labels.sh + setup-project.sh
 ├── .claude/settings.json     # project-scoped permissions/hooks only — agents live in the plugin
-└── dist/                     # build output, gitignored → theme.css to paste into ODC
+└── dist/                     # build output, gitignored → tokens.css + theme.css to paste into ODC
 ```
 
 ## The two GitHub outputs
