@@ -103,15 +103,40 @@ forms. **Labels, issue types, Projects and branch protection do not.** That is w
 scripts are for:
 
 ```bash
+gh auth refresh -s project                                    # one-time scope for any board command
 ./.github/setup-finding-labels.sh <owner>/<repo>
 ./.github/setup-project.sh <owner> <owner>/<repo> "<board name>"
 ```
 
-The first creates the `finding` / `handover` / type / `sev:*` label taxonomy. The second
-creates the Project board that findings (bugs) and handovers (tasks) both land on, with the
-`Status` column work moves across: Backlog → In Progress → Needs Review → Approved → Blocked.
-**Only board-Approved items reach an OutSystems build**, and only a human moves an item into
-Approved.
+The first creates the `finding` / `handover` / type / `sev:*` label taxonomy. The second creates
+the Project board that deliverables, findings (bugs) and handovers (tasks) all land on.
+
+**If the board already exists** — including a stock one you made in the GitHub UI, which has
+GitHub's default `Todo / In Progress / Done` — do not run `setup-project.sh` (it creates a new
+board). Bring the existing one up to spec instead:
+
+```bash
+./.github/migrate-project-status.sh <owner> <project-number>            # dry run: prints the plan
+./.github/migrate-project-status.sh <owner> <project-number> --confirm
+```
+
+It rewrites the `Status` options **in place** via GraphQL — renaming `Todo` → `Backlog` carries
+its cards across — and adds the custom fields the loop reads (`Tier`, `Level`, `Type`,
+`Severity`, `FigmaNode`, `Branch`, `Runner`). Nothing is deleted, so nothing is lost.
+
+Then record the board so the loop can find it:
+
+```bash
+npm run init          # paste the board URL when asked
+```
+
+That writes `owner` / `number` into **`project.config.json` → `board`**, which turns board-driven
+mode on. Leave them blank and the loop runs from the signed inventory in `loop/goal.md` instead.
+
+Work crosses eight `Status` lanes — **Backlog → Ready → In Progress → Ready for Review →
+Approved → Handover → Done**, plus **Blocked**. Two of them are yours alone: **only a human
+moves a card into `Approved` or `Done`**, and only `Approved` reaches an OutSystems build. See
+`WORKFLOW.md` §2.
 
 ### 5. Fill in the brand source of truth
 
@@ -122,17 +147,46 @@ Approved.
   (who handover tasks are assigned to), and the "Known signed-off exceptions" table. An
   approved deviation that is not written down there will be re-flagged as a bug on every run.
 
-### 6. Set the loop goal — including the signed-off component inventory
+### 6. Set the loop goal — including the inventory of record
 
-Edit `loop/goal.md`: the one-sentence goal, the Figma library URL, the branch name
-(`loop/<yyyy-mm-dd>-<slug>`), the run caps, and — the part people skip — **the signed-off
-component inventory**: the explicit, agreed list of components in scope, in build order.
+Edit `loop/goal.md`: the one-sentence goal, the Figma library URL, the branch strategy, the run
+caps, and — the part people skip — the **inventory of record**: what is in scope, and who said so.
 
-The inventory is a scope contract. Without it, the loop will happily build what it finds, and
-you discover at review time that half of it was never wanted and a third of what was wanted is
-missing. Agree the list with the designer before the first run.
+Set `Inventory source` to match how you are running:
+
+- **`board`** — the card *is* the inventory row, and the signature is a scope owner moving it to
+  `Ready`. Have them counter-sign the generated `deliverables.md` on a cadence; that is the
+  client-facing artifact. Note the honest limitation recorded in `goal.md`: the loop cannot
+  verify *who* moved a card, so restrict write access on the board to people who can commit to
+  scope.
+- **`artifact`** — the explicit, agreed component list, in build order, in the signed table.
+
+Either way it is a scope contract. Without it the loop will happily build what it finds, and you
+discover at review time that half of it was never wanted and a third of what was wanted is
+missing. Agree the list before the first run.
 
 ### 7. Run the loop
+
+#### Board-driven (the board is the queue)
+
+File a deliverable from `.github/ISSUE_TEMPLATE/deliverable.yml`, drop it in **Backlog**, and move
+it to **Ready** once it carries a Figma node or a written spec. Then:
+
+```bash
+npm run board:advance -- --dry-run    # print every decision, mutate nothing — do this first
+npm run board:advance                 # build one Ready card
+```
+
+Review what lands in **Ready for Review**, move it to **Approved**, then:
+
+```bash
+npm run board:ship                    # PR → squash-merge to main → handover Task → Handover
+```
+
+Want changes instead? Move the card back to **Ready** and comment what you want — the next
+`board:advance` reads owner comments as spec updates and rebuilds.
+
+#### Inventory-driven (the queue is `loop/goal.md`)
 
 **Watch the first run.** In Claude Code, in the repo:
 

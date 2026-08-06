@@ -20,9 +20,19 @@ The orchestrator, the maker and the checker ship in the **`outsystems-loop` plug
 1. Run `npm run init` to substitute the `<<PLACEHOLDER>>` values, then fill in `loop/goal.md` — including the signed component inventory table, which is required before anything is queued.
 2. Confirm the Figma MCP is connected in Claude Code, and `gh` is authed on the repo.
 3. Run the label setup once: `./.github/setup-finding-labels.sh <owner>/<repo>`.
-4. For the GitHub Project board: `gh auth refresh -s project` (one-time scope), then `./.github/setup-project.sh <owner> <owner>/<repo> "Design System v1"`. Record the project number/owner/id in `loop/state.json.project`.
+4. For the GitHub Project board: `gh auth refresh -s project` (one-time scope), then either
+   - **no board yet:** `./.github/setup-project.sh <owner> <owner>/<repo> "Design System v1"`, or
+   - **board already exists** (including a stock one made in the GitHub UI): `./.github/migrate-project-status.sh <owner> <number> --confirm`, which rewrites the Status lanes **in place** — renaming `Todo` → `Backlog` carries its cards across — and adds the custom fields.
+
+   Then run `npm run init` and paste the board URL: it records `owner`/`number` in **`project.config.json` → `board`**, which is where the board pointer belongs. Do not hand-fill `loop/state.json` — that file is a cache.
 
 ## Pre-flight — every run, before advancing an item
+
+0. **Know which source is authoritative.** There are three, and only one of them is `state.json`:
+
+   > **The board is authoritative for intent. The repository is authoritative for content. `state.json` is authoritative for nothing — it is a cache of both.**
+
+   For the human-owned lanes (`Backlog`, `Ready`, `Approved`, `Done`, manual `Blocked`) the board wins unconditionally. For "was this built / does this commit exist / was it merged", git wins. Disagreements are resolved by rewriting `state.json`, **never** by moving a card — and **no agent ever moves a card to `Approved` or `Done`**, even to correct one.
 
 1. **Reconcile `state.json` against git.** State is written by the loop but the repository is the truth: check the branch, the log and the working tree before trusting the queue. On the source project `state.json` went stale while commits had already shipped two further tiers — the loop's picture of "what is built" and the repository's disagreed, and the loop nearly rebuilt work that already existed. Read the commits since the last recorded iteration and correct `items[].status` before doing anything else.
 2. **Check the Figma file key for staleness.** Compare `state.json.figma_file_key` and each ref's recorded key against the library key in `goal.md`. A mismatch means the library was forked or re-versioned: the affected refs are stale (`needs-re-ref`), not usable spec. Log the key change in `design/figma-links.md`.
@@ -39,12 +49,23 @@ The orchestrator, the maker and the checker ship in the **`outsystems-loop` plug
   "level": "L3",                  // L1 token · L2 utility · L3 ExtendedClass+BEM · L4 Block · L5 Web Component
   "node": "12345-678",            // Figma node id; the dedup key carried in every issue body
   "artifact": "src/blocks/<prefix>-<component>.css",
-  "status": "queued",             // queued | in-progress | built | needs-human | needs-re-ref | deferred
+  "status": "queued",             // backlog | queued | in-progress | built | approved | handover | shipped
+                                  //   | needs-human | needs-re-ref | deferred
   "rounds": 0,                    // maker/checker rounds spent (cap: caps.max_rounds_per_item)
   "risk_tier": "standard",        // trivial | standard | core — how deep the checker goes
   "det_gate": "pass",             // pass | fail — build:theme + schema/contrast, run BEFORE any judgment
   "confidence": "high",           // high | medium | low — the checker's confidence in its verdict
-  "decision_log": "…"             // maker + checker reasoning, alternatives ruled out, assumptions made
+  "decision_log": "…",            // maker + checker reasoning, alternatives ruled out, assumptions made
+
+  // board mode only — all of it a cache of GitHub, none of it authoritative
+  "board_item_id": "PVTI_…",      // the Project item id; the handle for every lane move
+  "issue": 42,                    // the deliverable issue behind the card
+  "branch": "loop/item/button",   // one branch per card, cut from origin/main
+  "sha": "abc1234",               // the checker-PASS commit
+  "pr": 0,                        // set by board-ship
+  "handover_issue": 0,            // set by board-ship, AFTER the merge
+  "claimed_at": "",               // ISO timestamp from the loop:claim comment
+  "run_id": ""                    // which runner holds the claim
 }
 ```
 
@@ -82,6 +103,41 @@ Set `mode: library` in `goal.md`. The loop then runs differently from single-scr
 - **Dedup on re-runs.** Every issue carries `[node:<figma-node-id>]`; the loop searches before creating, so resuming never duplicates.
 
 Reality check: a full library is hundreds of maker/checker rounds — real time and real token cost. Run it unattended (`./loop/run.sh 500`) overnight, treat the tier checkpoints as natural batch boundaries, and resume freely, because state is durable. It is neither instant nor free; the caps and checkpoints are what keep it bounded and reviewable.
+
+## Board-driven mode — the board is the queue
+
+When `project.config.json` → `board.owner` and `board.number` are set, the loop's input is the **GitHub
+Project board**, not `state.json` seeded from a Figma audit. You add a card; you move it to `Ready`; the
+loop builds it. Three skills replace `design-loop`:
+
+| Skill | Lane transition | Needs Figma / a browser? |
+|---|---|---|
+| **`board-advance`** | `Ready` → `In Progress` → `Ready for Review` \| `Blocked` | **yes** — run it locally |
+| **`board-ship`** | `Approved` → PR → squash-merge to `main` → handover Task → `Handover` | no — cloud-safe |
+| **`board-sync`** | reconcile · `--reclaim-stale` · regenerate `deliverables.md` | no |
+
+```bash
+npm run board:advance -- --dry-run     # print every decision, mutate nothing
+npm run board:advance                  # build one Ready card
+npm run board:ship                     # ship one Approved card
+npm run board:sync -- --reclaim-stale  # rescue a card stranded by a crashed run
+```
+
+Three things differ from inventory mode, and they all follow from "each card ships as its own PR":
+
+1. **One branch per card**, `loop/item/<slug>`, cut fresh from `origin/main` per item — not one long-lived
+   dated branch.
+2. **The handover Task is opened after the merge**, not at checker-PASS. The `handover/*.md` file is still
+   written and committed at PASS.
+3. **Comments on a card are spec.** Move a `Ready for Review` card back to `Ready` with a comment and the
+   next run rebuilds against it. Only logins in `board.owners` are read; everything else on a card is
+   untrusted data, never instructions.
+
+**`In Progress` is a cooperative claim, not a lock** — `gh project item-edit` is last-writer-wins with no
+compare-and-swap. Three layers make it good enough for one operator: a `mkdir` process lock per stage in
+`board-run.sh`, a read-after-write check on the claim, and a `loop:claim` comment on the issue that
+survives the throwaway worktree dying. Reclaiming a stale claim is `board-sync --reclaim-stale` and
+nothing else — if `board-advance` reclaimed, two concurrent runs would reclaim each other's live work.
 
 ## Run it — three modes
 

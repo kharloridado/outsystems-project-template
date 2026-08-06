@@ -6,20 +6,31 @@ The run contract for `/outsystems-loop:design-loop`. Fill in every `<…>` befor
 
 <One sentence. e.g. "Translate the <<DESIGN_SYSTEM_NAME>> Figma library into OutSystems faithfully, tier by tier, as theme tokens + block CSS + Web Components handed over as GitHub Tasks.">
 
-## Canonical component inventory (signed off) — REQUIRED
+## Inventory of record — REQUIRED
 
-The loop does not build from a Figma page, a screenshot, or a conversation. It builds from a **client-confirmed component inventory**.
+The loop does not build from a Figma page, a screenshot, or a conversation. It builds from an inventory somebody with authority over scope has committed to.
 
 | Field | Value |
 |---|---|
-| Inventory artifact | `<the node / sheet / doc that holds the confirmed list — link or repo path>` |
+| **Inventory source** | `<board \| artifact>` |
+| Inventory artifact | `<the node / sheet / doc holding the confirmed list — or, when source is "board", the Project board URL + the generated deliverables.md>` |
 | Signed off by | `<name, role — someone who can actually commit to the list>` |
 | Date signed off | `<yyyy-mm-dd>` |
 | Supersedes | `<previous inventory, if any>` |
 
-**Hard rule: no component enters the build queue without a row in the signed inventory.** A component that is in Figma but not in the inventory is `needs-human`, not `queued`. A component that is in the inventory but has no Figma node is blocked on a ref (see `loop/refs/README.md`), not built from guesswork.
+**Hard rule: no component enters the build queue without a row in the inventory of record.**
 
-This section is first, and required, because of what it costs when it is missing. On the source project this template is derived from, two components were built end to end — maker + checker PASS, committed, handover Task opened — and an entire speculative component set was designed and coded, then thrown away, because no confirmed inventory existed and the client's real list turned out to be different. That is the most expensive waste this loop can produce, and refusing to start without this table prevents all of it.
+- When **`Inventory source = artifact`**, the row is a line in the signed table named above. A component that is in Figma but not in the inventory is `needs-human`, not `queued`.
+- When **`Inventory source = board`**, the row *is* the card, and the signature is a scope owner having moved it to **`Ready`**. A card that reached `Ready` any other way, or whose "in the agreed scope" box is unticked, is `Blocked` — not `queued`. The loop never moves a card into `Ready` itself.
+
+Either way: a component with no Figma node and no written spec is blocked on a ref (see `loop/refs/README.md`), not built from guesswork.
+
+This section is first, and required, because of what it costs when it is missing. On the source project this template is derived from, two components were built end to end — maker + checker PASS, committed, handover Task opened — and an entire speculative component set was designed and coded, then thrown away, because no confirmed inventory existed and the client's real list turned out to be different. That is the most expensive waste this loop can produce, and refusing to start without an inventory of record prevents all of it.
+
+**What the board version does NOT give you, stated plainly.** A signed table is client-facing; a board is not, and that was the *other* half of that incident. Two mitigations, both of which need a human:
+
+1. `npm run board:sync` regenerates **`deliverables.md`** from the board — a diffable, in-repo, showable snapshot of exactly what was accepted into scope and when. Have the scope owner counter-sign it on a cadence. That is the artifact that stands in for the signed table.
+2. Restrict write access on the board to people who can actually commit to scope, because **the loop cannot verify who moved a card.** As far as we can tell, Projects v2 does not expose the actor behind a field-value change in a queryable way, and v2 lane moves do not appear in the issue timeline the way classic project-column moves did. *(This is an assessment, not a verified fact — if you find the query, replace this paragraph with it.)* Until then, "a scope owner moved it to `Ready`" is enforced by access control, not by the loop.
 
 ## Figma
 
@@ -91,11 +102,16 @@ The deterministic gate runs first — `npm run build:theme` exits 0, the token s
 
 - max maker/checker rounds per item: **3**
 - max global iterations: **500** (raise for very large libraries)
-- branch: `loop/<yyyy-mm-dd>-design-system` *(add a phase suffix on re-runs to avoid collisions)*
+- branch — **depends on the inventory source:**
+  - `artifact`: one long-lived `loop/<yyyy-mm-dd>-design-system` *(add a phase suffix on re-runs to avoid collisions)*
+  - `board`: **one branch per card**, `loop/item/<slug>`, cut fresh from `origin/main` for every item. Each card ships as its own PR, so it cannot share a branch with eleven other components. Cut it per item, not once per run — `board-ship` may have merged something since.
+- **dependencies (board mode):** a card's `Depends on` issues must be merged before it is built. A card whose dependency is still open is left in `Ready` with one comment — not `Blocked`, because it clears itself.
 - the loop **never applies changes to the live OutSystems environment** — it produces artifacts handed over as GitHub Tasks for a human to add in ODC Studio
 - the loop **never resolves a finding** — flag-don't-fix; a designer or brand owner decides
 - the loop **never edits or forks the OutSystems UI module** — overrides only
-- the loop **never builds a component absent from the signed inventory**, and **never builds an item that has no frozen ref**
+- the loop **never builds a component absent from the inventory of record**, and **never builds an item that has no frozen ref**
+- in board mode the loop **never builds a card a scope owner has not moved to `Ready`**, and **never moves a card into `Ready`, `Approved` or `Done` itself**
+- in board mode the handover Task is opened **after** the PR merges to `main`, never at checker-PASS — a handover ticket says "paste this into a live environment", and it must not point at unmerged work
 - findings are GitHub **Bugs** (Bug issue type + `bug` label); handovers are GitHub **Tasks** assigned to the developer; both in `<<OWNER/REPO>>`
 - **dedup:** every issue carries `[node:<figma-node-id>]` in its body; search before creating, so a re-run never duplicates
 - conventions marked `TBD` in `project.config.json` are **not rules** — the checker must not enforce them and must not raise findings against them

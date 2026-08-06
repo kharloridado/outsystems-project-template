@@ -21,7 +21,11 @@
     "build:osui": "node build/build-osui.mjs",
     "preview": "node build/preview-server.mjs",
 
-    "embed:handover": "node build/embed-handover-code.mjs"
+    "embed:handover": "node build/embed-handover-code.mjs",
+
+    "board:advance": "./loop/board-run.sh advance",
+    "board:ship": "./loop/board-run.sh ship",
+    "board:sync": "./loop/board-run.sh sync"
   },
   "devDependencies": {
     "lightningcss-cli": "^1.30.1",
