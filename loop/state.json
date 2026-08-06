@@ -1,5 +1,5 @@
 {
-  "_schema_note": "The loop's durable memory. Empty skeleton: fill from loop/goal.md on the first run. Item and finding shapes are documented in loop/README.md. `tiers` is a PROJECT-CONFIGURABLE list, not a fixed taxonomy — add or rename tiers to match this project's dependency graph, and keep `current_tier` pointing at one of them. Reconcile this file against git before advancing (see the pre-flight in loop/README.md).",
+  "_schema_note": "The loop's durable memory, and A CACHE — never an authority. The board owns intent, the repository owns content, this file owns nothing; reconcile it against both before advancing (see the pre-flight in loop/README.md). Empty skeleton: fill from loop/goal.md on the first run. Item and finding shapes are documented in loop/README.md. `tiers` is a PROJECT-CONFIGURABLE list, not a fixed taxonomy — add or rename tiers to match this project's dependency graph, and keep `current_tier` pointing at one of them. The board POINTER is deliberately not here: it is a project value and lives in project.config.json -> board. Only DERIVED board ids are cached here, in board_cache.",
 
   "goal": "",
   "figma_url": "<<FIGMA_URL>>",
@@ -9,8 +9,15 @@
   "mode": "single",
   "phase": "",
 
-  "project": { "owner": "", "number": 0, "id": "", "title": "" },
   "repo": "<<OWNER/REPO>>",
+
+  "board_cache": {
+    "_note": "Derived ids only, refreshed on a miss. An id that stops resolving means someone recreated a field, not that the card vanished. The board's owner/number live in project.config.json -> board.",
+    "project_id": "",
+    "field_ids": {},
+    "option_ids": {},
+    "fetched_at": ""
+  },
 
   "caps": {
     "max_rounds_per_item": 3,

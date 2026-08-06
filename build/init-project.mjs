@@ -82,6 +82,30 @@ const repo = await ask("GitHub repo (owner/repo)", has(cfg.repo) ? cfg.repo : ""
 const figmaUrl = await ask("Figma library URL (blank if not yet known)", has(cfg.figma?.url) ? cfg.figma.url : "", "figma-url");
 const figmaKey = figmaUrl.match(/(?:file|design)\/([A-Za-z0-9]+)/)?.[1] ?? "";
 
+/* Board-driven mode is opt-in: leave the URL blank and the loop runs from the signed
+ * inventory in loop/goal.md instead. Both owner and number come from the same URL, so
+ * ask for the URL once rather than making you retype the owner. */
+const boardUrl = await ask(
+  "GitHub Project board URL (blank = drive the loop from loop/goal.md instead)",
+  cfg.board?.url ?? "",
+  "board-url"
+);
+const boardMatch = boardUrl.match(/github\.com\/(?:users|orgs)\/([^/]+)\/projects\/(\d+)/);
+if (boardUrl && !boardMatch) {
+  throw new Error(
+    `Could not parse "${boardUrl}".\n` +
+      `Expected https://github.com/users/<owner>/projects/<number> or .../orgs/<owner>/projects/<number>.`
+  );
+}
+const boardOwner = boardMatch?.[1] ?? null;
+const boardNumber = boardMatch ? Number(boardMatch[2]) : null;
+/* `owners` gates whose card comments are read as spec — everything else on a card is
+ * untrusted input. Default it to the board owner so board mode is never left with an
+ * empty allow-list (check:config rejects that), but it is meant to be widened by hand. */
+const boardOwners = boardOwner
+  ? (cfg.board?.owners?.length ? cfg.board.owners : [boardOwner])
+  : [];
+
 console.log(`
 Conventions (spacing base, grid, breakpoints, default component size) start as "TBD"
 on purpose. Do NOT guess them. Promote one to "confirmed" in project.config.json only
@@ -97,6 +121,13 @@ Object.assign(cfg, {
   odcThemeModule: themeModule,
   repo,
   figma: { fileKey: figmaKey || "<<FIGMA_FILE_KEY>>", url: figmaUrl || "<<FIGMA_URL>>" },
+  board: {
+    ...cfg.board,
+    owner: boardOwner,
+    number: boardNumber,
+    url: boardUrl || null,
+    owners: boardOwners,
+  },
 });
 cfg.findings.ticketTarget = repo;
 writeFileSync(CONFIG, JSON.stringify(cfg, null, 2) + "\n");
@@ -144,8 +175,13 @@ Next:
   1. npm run check:config        # must pass; it is part of the build gate
   2. git submodule update --init # vendor/outsystems-ui — then pin it to your ODC env's version
   3. ./.github/setup-finding-labels.sh ${repo || "<owner/repo>"}
-  4. ./.github/setup-project.sh  <owner> ${repo || "<owner/repo>"} "Design System v1"
-  5. fill in design/brand-guidelines.md + design/figma-links.md
-  6. set the goal + the SIGNED-OFF component inventory in loop/goal.md
-  7. /outsystems-loop:design-loop
+  4. gh auth refresh -s project   # one-time scope, required for any board command
+  5. ${boardOwner
+       ? `board #${boardNumber} is already configured — if it predates the 8-lane gate, run:\n     ./.github/migrate-project-status.sh ${boardOwner} ${boardNumber} --confirm`
+       : `./.github/setup-project.sh  <owner> ${repo || "<owner/repo>"} "Design System v1"\n     (then re-run \`npm run init\` with the board URL to enable board-driven mode)`}
+  6. fill in design/brand-guidelines.md + design/figma-links.md
+  7. set the goal in loop/goal.md${boardOwner
+       ? " (Inventory source = board — the board is the queue)"
+       : " + the SIGNED-OFF component inventory"}
+  8. ${boardOwner ? "npm run board:advance   # or /outsystems-loop:board-advance" : "/outsystems-loop:design-loop"}
 `);

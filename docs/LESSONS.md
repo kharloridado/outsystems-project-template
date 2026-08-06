@@ -256,3 +256,46 @@ now.
 
 **Why this is here:** a scheduled routine committed an interactive session's uncommitted, unfinished work
 into an unrelated branch, and the untangling cost more than the routine saved.
+
+### 4.4 A Projects v2 field is not a lock, and the built-in Status field cannot be deleted
+
+Two things about GitHub Projects that a board-driven loop discovers the hard way.
+
+**`item-edit` is last-writer-wins.** There is no compare-and-swap on a Projects v2 field value, so
+"move the card to In Progress and treat that as a lock" is a *cooperative* claim and nothing more. Two
+runners can both read `Ready`, both write `In Progress`, and both proceed. Three layers get it to
+good-enough for one operator, and it is worth being explicit that none of them is a real mutex:
+
+1. a `mkdir` process lock per stage in `loop/board-run.sh` — the only actual lock, and it only covers
+   runs on one machine;
+2. a read-after-write check — claim, wait ~2s, re-read, abandon the card if the claim is not yours. This
+   narrows the race to seconds; it does not close it;
+3. a `loop:claim` comment on the issue. The runner works in a throwaway worktree, so its `state.json` may
+   never be committed if it dies — the comment is on GitHub and survives anything, and it is how the ship
+   and sync stages find the branch afterwards.
+
+And **stale-claim recovery lives in a different skill on purpose.** If `board-advance` reclaimed stale
+claims, two concurrent advance runs would reclaim each other's *live* work — the failure the lock was
+supposed to prevent, reintroduced by the cleanup. Reclaim is `board-sync --reclaim-stale`, run
+deliberately.
+
+**Status is a built-in field and cannot be deleted:**
+
+```
+GraphQL: Only custom fields can be deleted. (deleteProjectV2Field)
+```
+
+`gh` cannot edit a single-select field's options, so the obvious workaround is delete-and-recreate. It
+does not work on `Status`. An earlier version of `setup-project.sh` did exactly that, logged the failure
+to stderr and carried on — so every board it "set up" silently kept GitHub's default Todo / In Progress /
+Done and could not express the review gate the whole workflow turns on. The script reported success.
+
+The working API is the GraphQL `updateProjectV2Field` mutation, which rewrites `singleSelectOptions` in
+place. Each option may carry an `id`: pass an existing one and that option is **updated in place, even
+renamed, with every card in it keeping its value**; omit it and a new option is created; leave an id out
+of the list entirely and that option — and its cards' lane — is gone. So migrating `Todo` → `Backlog` is
+a rename that carries the cards for free, and only options with no id to inherit need a save-and-restore.
+
+**The general lesson:** a setup script that swallows an API error and prints "Done" is worse than one
+that crashes. This one shipped a broken review gate to every project that ran it, and nothing failed
+until someone tried to move a card to a lane that had never existed.
