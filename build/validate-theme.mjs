@@ -15,14 +15,30 @@
  *      explicit fallback). A dangling var() is silently invalid at runtime: the property
  *      just doesn't apply, and the component renders subtly wrong with no error anywhere.
  *
+ * BOTH PASTES ARE VALIDATED. The build emits dist/tokens.css (definitions) and
+ * dist/theme.css (classes/overrides, which reference them). Structure and syntax are
+ * checked per file — each is pasted separately and must stand alone — while the token
+ * schema is resolved across their UNION, in paste order (tokens first), because that is
+ * the document the browser actually assembles. Validating theme.css alone after the split
+ * would report every token in the design system as dangling.
+ *
  * Usage:  node build/validate-theme.mjs      (runs as part of npm run build:theme) */
 import { readFileSync, existsSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { root } from "./lib/project-config.mjs";
 
-const themeFile = join(root, "dist", "theme.css");
-const css = readFileSync(themeFile, "utf8");
+/* Paste order: tokens define, theme consumes. */
+const PASTES = ["tokens.css", "theme.css"]
+  .map((name) => ({ name, path: join(root, "dist", name) }))
+  .filter((f) => existsSync(f.path));
+
+if (!PASTES.length) {
+  console.error("\nvalidate:theme FAILED — no build output found in dist/. Run `npm run build:theme`.\n");
+  process.exit(1);
+}
+for (const f of PASTES) f.css = readFileSync(f.path, "utf8");
+
 const errors = [];
 
 /* ---- 1a. structure: balanced braces + terminated comments ------------------------ */
@@ -33,27 +49,29 @@ const errors = [];
  * unterminated comment or a stray brace in ONE token file is the single most likely way to
  * corrupt the whole theme. That is precisely the failure the deterministic gate exists to
  * catch, so we check it explicitly rather than hoping the parser complains. */
-function checkStructure(s) {
+function checkStructure(s, name) {
   let depth = 0;
   let line = 1;
   for (let i = 0; i < s.length; i++) {
     if (s[i] === "\n") { line++; continue; }
     if (s[i] === "/" && s[i + 1] === "*") {
       const end = s.indexOf("*/", i + 2);
-      if (end === -1) return `unterminated comment opened at dist/theme.css:${line}`;
+      if (end === -1) return `unterminated comment opened at dist/${name}:${line}`;
       line += s.slice(i, end).split("\n").length - 1;
       i = end + 1;
       continue;
     }
     if (s[i] === "{") depth++;
-    else if (s[i] === "}" && --depth < 0) return `unexpected "}" at dist/theme.css:${line}`;
+    else if (s[i] === "}" && --depth < 0) return `unexpected "}" at dist/${name}:${line}`;
   }
   if (depth > 0) return `${depth} unclosed "{" — a block is never closed (check the token files for a stray brace)`;
   return null;
 }
 
-const structural = checkStructure(css);
-if (structural) errors.push(`dist/theme.css is structurally broken: ${structural}`);
+for (const f of PASTES) {
+  f.structural = checkStructure(f.css, f.name);
+  if (f.structural) errors.push(`dist/${f.name} is structurally broken: ${f.structural}`);
+}
 
 /* ---- 1b. syntax: parse it for real ----------------------------------------------- */
 /* Call the lightningcss binary directly out of node_modules/.bin — going through `npx`
@@ -71,44 +89,49 @@ if (!existsSync(bin)) {
     "validate:theme — lightningcss not installed, skipping the parse check (run `npm install`).\n" +
       "                 The structural and token-schema checks still ran."
   );
-} else if (!structural) {
+} else {
   const probe = join(root, "dist", ".validate-probe.css");
-  // `cmd.exe /c` rather than { shell: true }: same effect, without Node's DEP0190 warning
-  // firing on every single build.
-  const [cmd, args] = isWin
-    ? ["cmd.exe", ["/c", bin, themeFile, "-o", probe]]
-    : [bin, [themeFile, "-o", probe]];
-  try {
-    execFileSync(cmd, args, { stdio: ["ignore", "ignore", "pipe"], cwd: root });
-  } catch (err) {
-    const detail = (err.stderr?.toString() || err.message).trim();
-    errors.push(`dist/theme.css does not parse as valid CSS:\n\n${detail}`);
-  } finally {
-    rmSync(probe, { force: true });
+  for (const f of PASTES) {
+    if (f.structural) continue;
+    // `cmd.exe /c` rather than { shell: true }: same effect, without Node's DEP0190 warning
+    // firing on every single build.
+    const [cmd, args] = isWin
+      ? ["cmd.exe", ["/c", bin, f.path, "-o", probe]]
+      : [bin, [f.path, "-o", probe]];
+    try {
+      execFileSync(cmd, args, { stdio: ["ignore", "ignore", "pipe"], cwd: root });
+    } catch (err) {
+      const detail = (err.stderr?.toString() || err.message).trim();
+      errors.push(`dist/${f.name} does not parse as valid CSS:\n\n${detail}`);
+    } finally {
+      rmSync(probe, { force: true });
+    }
   }
 }
 
-/* ---- 2. token schema ------------------------------------------------------------ */
+/* ---- 2. token schema (across the union, in paste order) -------------------------- */
 /* Strip comments first: a commented-out example like `var(--not-real)` is not a usage. */
-const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+for (const f of PASTES) f.code = f.css.replace(/\/\*[\s\S]*?\*\//g, "");
 
-const defined = new Set([...code.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+const defined = new Set(PASTES.flatMap((f) => [...f.code.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1])));
 
 /* A usage only counts as dangling when it has NO fallback — `var(--x, 8px)` is a
  * documented fallback chain and is legitimate (Web Components rely on it). */
 const dangling = new Map();
-for (const m of code.matchAll(/var\(\s*(--[\w-]+)\s*([,)])/g)) {
-  const [, name, next] = m;
-  if (next === ")" && !defined.has(name)) {
-    const line = code.slice(0, m.index).split("\n").length;
-    if (!dangling.has(name)) dangling.set(name, line);
+for (const f of PASTES) {
+  for (const m of f.code.matchAll(/var\(\s*(--[\w-]+)\s*([,)])/g)) {
+    const [, name, next] = m;
+    if (next === ")" && !defined.has(name)) {
+      const line = f.code.slice(0, m.index).split("\n").length;
+      if (!dangling.has(name)) dangling.set(name, `dist/${f.name}:${line}`);
+    }
   }
 }
 
 if (dangling.size) {
   const list = [...dangling.entries()]
     .slice(0, 15)
-    .map(([name, line]) => `      ${name}  (first used at dist/theme.css:${line})`)
+    .map(([name, at]) => `      ${name}  (first used at ${at})`)
     .join("\n");
   errors.push(
     `${dangling.size} token reference(s) resolve to nothing and have no fallback:\n\n${list}` +
@@ -126,4 +149,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log(`validate:theme → ok (${defined.size} tokens defined, all references resolve)`);
+console.log(
+  `validate:theme → ok (${PASTES.map((f) => `dist/${f.name}`).join(" + ")}; ${defined.size} tokens defined, all references resolve)`
+);

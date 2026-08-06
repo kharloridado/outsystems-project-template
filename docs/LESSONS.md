@@ -67,6 +67,16 @@ explicitly.
 **Why this is here:** a status badge was 2px taller than the mockup in every size, traced to a genuine
 1px border where the design intended a painted edge.
 
+The same rule holds for a height derived from padding. The host inflates an inherited `line-height`,
+so a component whose height is `padding + line-height` measures a couple of pixels taller once
+published than it does in the local preview — the preview is honest about your CSS and silent about
+the host's. Pin the height explicitly per size and centre the content inside it; then the number in
+the design is the number that ships, in both places.
+
+**Why this is here:** a pill that was correct in the preview rendered 2px taller in ODC in every
+size, because its height came from padding and the platform's inherited line-height was larger than
+the preview's.
+
 ### 1.5 Never use a framework runtime utility class as a CSS selector
 
 Frameworks ship classes that their **JavaScript** adds and removes at runtime to signal state (the
@@ -106,6 +116,46 @@ touch a URL.
 
 **Why this is here:** a serif fallback was diagnosed as a broken font path, and the "fix" — rewriting the
 `src` — made it worse. The real cause was an undeclared 500-weight face.
+
+The same rewriting applies to any `url()` pointing at a module resource — an SVG used as a
+`mask-image`, a background image. Author it as the plain module-relative path and let the platform
+resolve it; a path the platform *cannot* resolve to a resource silently renders nothing. But the
+rewrite is not universal: some assets are served **verbatim** at the literal path instead. So the
+diagnostic order is: find out how *this* asset is actually served before you touch its URL. A 404 on
+the authored path is evidence of nothing until you know which of the two you are looking at.
+
+Keep authored assets destined for Theme Resources in `src/assets/` — they are source, not build
+output, and putting them in a gitignored `dist/` loses them.
+
+**Why this is here:** an icon that rendered as an empty box was "fixed" three times in three
+different directions — as a font glyph, as an inline data URI, as a rewritten path — before anyone
+established how the platform was serving that particular file.
+
+---
+
+### 1.8 Style the framework's own classes, never the platform's generated block name
+
+Platform-generated per-Block attributes and names (`data-block="MyModule.MyBlock"` and friends) look
+like convenient hooks. They are not: they encode the module and Block *name*, so any rename — or
+reusing the Block from another module — silently unstyles the component, with no error and no failing
+build. Anchor styling to the framework's own classes or to the BEM class you put there yourself.
+
+**Why this is here:** a sidebar's user-info styling was keyed on the generated block name and
+evaporated the moment the Block was renamed.
+
+### 1.9 The framework floors widget dimensions — a size ramp can be silently clamped
+
+Framework widgets carry their own `min-height` / `min-width` (a 40px minimum on a control is typical).
+Your size ramp will honour those floors whether or not you know about them: the larger steps look
+right, and the smallest one silently renders at the framework's floor instead of the designed value.
+Nothing errors, and the defect is invisible unless the smallest size is on screen next to a spec.
+
+Before building a ramp, measure the framework's constraint on that widget, then decide explicitly:
+override the floor, or adopt it as the design's smallest step and record the decision.
+
+**Why this is here:** a control's Small step was specified at 32px, was clamped to the framework's
+40px floor, and shipped that way — the bug lived in a rule nobody had read, not in the CSS that was
+written.
 
 ---
 
@@ -165,6 +215,51 @@ order (framework base → theme → overrides).
 
 **Why this is here:** one component passed preview review and broke in production purely because its CSS
 was never loaded in the preview at all.
+
+### 2.4 Overlays are appended to `<body>`, outside the widget you scoped your CSS to
+
+Balloons, popups, dropdown lists, date-picker panels — providers append them to `<body>` at open time,
+not inside the widget's own DOM. So an override scoped to the widget root simply never matches the
+open state: the closed control restyles perfectly and the thing the user actually interacts with
+renders in the provider's raw skin.
+
+Providers usually mirror a wrapper class onto the detached node. Scope overlay rules to *that*, and
+verify by opening the overlay and inspecting where the node really lives — not by reading your
+selector and agreeing with yourself.
+
+**Why this is here:** an option list that looked correct in every screenshot of the closed control
+shipped unstyled the moment it was opened, because the balloon lived at the end of `<body>` and
+carried none of the classes the CSS was written against.
+
+### 2.5 Do the specificity arithmetic mechanically — including `:not()` arguments
+
+When you are out-specifying framework CSS, a header comment recording "vendor rule is (0,3,0)" is
+load-bearing: every later override is written to beat that number. Count it mechanically, and count
+the arguments of `:not()` — they contribute their own specificity, which is exactly the term people
+drop. A single miscount propagates into every rule that trusted it, and the second and third "fixes"
+each fail for the same reason as the first.
+
+Corollary worth knowing: **`:is()` takes the specificity of its most specific argument**. Widening
+`.a .x` to `:is(.a, .b) .x` therefore moves nothing in the cascade — it is the safe way to make one
+rule serve two widget variants without disturbing anything else.
+
+**Why this is here:** three vendor rules were recorded as `(0,3,0)` when all three were `(0,4,0)`,
+and a second component copied the technique along with the wrong arithmetic — one miscount, two
+broken components, three attempts.
+
+### 2.6 Some third-party widget options only apply at construction
+
+Configuration objects for third-party widgets are not uniformly live. A number of options are read
+**once, at construction**, and a later "set option" call for them is accepted and silently ignored —
+no error, no warning, no effect. Grid row numbering, virtualisation modes and column layout options
+are common examples.
+
+When wiring an option, check whether it is initial-only; if it is, it must be merged into the options
+object *before* the widget is created, and the handover has to say so, because the developer wiring it
+in the platform has only the runtime API in front of them.
+
+**Why this is here:** a grid feature was set through the runtime API, reported success, and never
+appeared — the option was initial-only and the call was a no-op.
 
 ---
 
@@ -256,3 +351,41 @@ now.
 
 **Why this is here:** a scheduled routine committed an interactive session's uncommitted, unfinished work
 into an unrelated branch, and the untangling cost more than the routine saved.
+
+### 4.4 The hand-pasted theme is the one deliverable that rots unwatched
+
+Everything else here deploys itself from the repo. The theme is copied by hand into the platform's
+Theme editor, so the live environment can stop matching `main` in two ways nobody is notified about:
+a token change built and committed but never re-pasted, and an edit made directly in the platform
+that exists in no branch. Both look fine in the repo and fine in the preview.
+
+Schedule a diff of the live compiled theme against a fresh local build (`npm run check:live-theme`,
+`loop/ROUTINES.md` §4), and fetch it from **stable, un-fingerprinted URLs** — a URL that changes
+every publish makes the check a maintenance chore and it gets switched off. Give the check three
+outcomes, not two: in sync, drift, and *could not fetch*. A checker that treats an unreachable
+target as "fine" reports success forever.
+
+**Why this is here:** the live theme was several token changes behind the repo for days, and the
+first person to notice was a stakeholder looking at the wrong colour on a screen.
+
+---
+
+## 5. Verifying your own work
+
+### 5.1 Presence is not appearance — measure the computed style
+
+The failure mode is not "I forgot to check". It is checking something adjacent to the claim and
+accepting it: confirming the element is *there*, that the class is applied, that the declaration is in
+the file — none of which is evidence about what the user sees. Reading source tells you what you
+asked for. Only the browser tells you what you got, because framework and provider CSS out-specify a
+perfectly correct declaration and win silently.
+
+So verify by measuring: `getComputedStyle` and `getBoundingClientRect` on the rendered element, cited
+in the review, against the value the spec states. Check the whole ancestor chain when a number does
+not reconcile — a parent `transform`, a pinned `min-height` or an inherited `color` will override a
+rule that is itself correct. And measure an icon's rendered **ink**, not its `font-size`: design tools
+draw a glyph inset inside its box, so the font-size can be right while the glyph is visibly small.
+
+**Why this is here:** a component shipped with an icon at 1.06:1 contrast and 20% undersized. Every
+gate was green and the source was correct — both defects were cascade losses to vendor CSS, and the
+review had confirmed the element existed rather than measuring what it looked like.

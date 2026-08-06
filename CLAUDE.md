@@ -123,7 +123,7 @@ developer**, who adds it into OutSystems themselves. Label `handover` + `task`; 
 **Rule: the handover ticket must CONTAIN the JS/CSS to copy into ODC — not just point at a
 repo path.** Every `handover/*.md` carries a `## Code to paste into ODC` section with the
 verbatim artifact(s) in a collapsed `<details>` block (source path in the `<summary>`).
-Tokens travel via `dist/theme.css` as their own paste, so they are not duplicated there.
+Tokens travel via `dist/tokens.css` as their own paste, so they are not duplicated there.
 Embed only what the developer hand-places: block CSS overrides and Web Component `.js`. The
 blocks are generated from source by `node build/embed-handover-code.mjs` (idempotent) —
 re-run it after editing a handed-over source file, and add new handovers to its `MAP`.
@@ -150,21 +150,40 @@ with a `Status` column. Only board-**Approved** items reach an OutSystems build.
 
 - Source tokens live in `tokens/` (`colors.css`, `spacing.css`, `typography.css`, plus the
   semantic, utility, per-component and OutSystems-UI-override layers).
-- `npm run build:theme` → `dist/theme.css` to paste into the ODC Theme editor. Assembled by
-  `build/build-theme.mjs` (comment-preserving), which lifts every file's `:root` into ONE
-  consolidated block and prepends an **OutSystems-UI-style Table of Contents + section
-  banners**, keeping the source provenance/finding comments. **Rule: `dist/theme.css` must
-  always carry that TOC + sectioning** — never ship a flat, comment-stripped theme. Section
-  order follows the `@import` order in `tokens/index.css`; add a new token file's title to
-  the `META` map in the build script when you add the file.
-- `npm run build:theme:ship` → the **customer deliverable**: the same `dist/theme.css` with
+- `npm run build:theme` → **two ODC pastes**:
+  **`dist/tokens.css`** — the design tokens ONLY (the single consolidated `:root` plus
+  device-scoped token redefinitions like `body.phone` type steps) — and
+  **`dist/theme.css`** — everything else (`@font-face`, base rules, utility classes,
+  widget/component overrides; NO tokens). Paste **both** into the ODC Theme editor;
+  a token-only change then means re-pasting only `dist/tokens.css`.
+  Assembled by `build/build-theme.mjs` (comment-preserving), which lifts every file's
+  `:root` into ONE consolidated block and prepends an **OutSystems-UI-style Table of
+  Contents + section banners** to EACH file, keeping the source provenance/finding
+  comments. **Rule: both dist files must always carry that TOC + sectioning** — never ship
+  a flat, comment-stripped theme. Section order follows the `@import` order in
+  `tokens/index.css`; each file declares its own place with a `/* @section Group / Name */`
+  header (and an optional `@kind branding|foundation|component`), so there is no table to
+  keep in sync.
+- **Token change report (every build):** the assembled token set is diffed against the
+  committed baseline `tokens/tokens.lock.json`; added/modified/removed tokens are printed
+  classified **branding** (palette, semantic roles, framework retints) / **foundation**
+  (spacing, type, radius, border, shadow) / **component**, and recorded newest-first in
+  `tokens/TOKEN-CHANGELOG.md`. A design system's tokens are its public API — a rename that
+  lands silently is a breaking change nobody reviewed. Both files are generated **and
+  tracked**: commit them with the token change; never edit them by hand. The first build of
+  a new project seeds the baseline instead of reporting every token as added.
+- `npm run check:live-theme` → diffs the **live** ODC theme against a fresh local build, so
+  the manual copy-paste can be shown to be current. Exit `0` in sync / `1` drift / `2` live
+  unreachable, and `0` with "not configured" until the `odc` block in `project.config.json`
+  is filled in. See `loop/ROUTINES.md` §4 for the scheduled version.
+- `npm run build:theme:ship` → the **customer deliverable**: the same two files with
   ordinary `/* … */` provenance/finding notes stripped, keeping the `/*!` head, Section
-  Index and section banners (so it still satisfies the rule above). Re-run `build:theme` to
+  Index and section banners (so they still satisfy the rule above). Re-run `build:theme` to
   restore the commented dev copy.
 - `npm run watch:theme` for live rebuilds while iterating.
 - `npm run build:theme:min` → `dist/theme.min.css` via lightningcss. Optional; strips
-  comments, so it is **not** the file pasted into ODC.
-- The theme version is the `version` in `package.json`, stamped into `dist/theme.css`. See
+  comments, so it is **not** a file pasted into ODC.
+- The theme version is the `version` in `package.json`, stamped into both dist files. See
   `RELEASING.md`.
 
 ### Commands
@@ -174,8 +193,9 @@ with a `Status` column. Only board-**Approved** items reach an OutSystems build.
 | `npm install` | Install build deps. |
 | `npm run init` | Fill in `project.config.json` and substitute every `<<PLACEHOLDER>>` across the scaffold. Run once per engagement; re-runnable. |
 | `npm run check:config` | The drift guard. Fails if a placeholder survives, if the example prefix `acme-` leaked into real code, or if a convention is malformed. Runs automatically before `build:theme`. |
-| `npm run build:theme` | Assemble `tokens/*.css` → `dist/theme.css` (commented, TOC'd, single `:root`). Paste into ODC. |
-| `npm run build:theme:ship` | Customer deliverable: ordinary comments stripped, `/*!` TOC + banners kept. |
+| `npm run build:theme` | Assemble `tokens/*.css` → `dist/tokens.css` (design tokens only, single `:root`) + `dist/theme.css` (classes/overrides, no tokens), both commented + TOC'd. Paste BOTH into ODC. Also diffs the token set vs `tokens/tokens.lock.json` and logs branding/foundation/component changes to `tokens/TOKEN-CHANGELOG.md`. |
+| `npm run check:live-theme` | Diff the LIVE ODC theme against a fresh local build. Exit 0 in sync / 1 drift / 2 unreachable; 0 + "not configured" until `project.config.json`'s `odc` block is filled in. |
+| `npm run build:theme:ship` | Customer deliverable: both files with ordinary comments stripped, `/*!` TOC + banners kept. |
 | `npm run build:theme:min` | Minified `dist/theme.min.css` (not for ODC paste). |
 | `npm run watch:theme` | Rebuild the theme on token changes. |
 | `npm run gen:color-utilities` | Generate `.background-*` / `.text-*` utility classes. |
@@ -221,8 +241,10 @@ order is load-bearing: primitives (colors, spacing, typography, radius, border, 
 the semantic role layer → generated utility classes → per-component token files →
 **OutSystems UI overrides LAST** (`outsystems-ui-overrides.css` and friends) so their
 `:root` redefinitions win over the framework defaults. `build/build-theme.mjs` consolidates
-every `:root` into one block, keeps comments, and prepends the TOC. When you add a token
-file, add it to `index.css` **and** to the `META` map in `build-theme.mjs`.
+every `:root` into one block, keeps comments, prepends the TOC, and splits the result into
+`dist/tokens.css` (definitions) + `dist/theme.css` (classes/overrides). When you add a token
+file, add it to `index.css` and give it a `/* @section Group / Name */` header — the section
+metadata is self-declared in the file, so there is no second place to forget.
 
 **`src/` — two delivery shapes.**
 - `src/blocks/*.css` — BEM `ExtendedClass` overrides that **restyle native OutSystems UI
@@ -234,11 +256,15 @@ file, add it to `index.css` **and** to the `META` map in `build-theme.mjs`.
   Lit/Stencil/React.
 
 **Local preview (`preview/`).** `preview/index.html` is the Live Style Guide harness with
-three layers: (1) the **real** compiled OutSystems UI CSS (`npm run build:osui`), (2)
-`dist/theme.css`, (3) the `src/` overrides + Web Components. The preview chrome must stay
-token-only and class-only — no inline styles, no ad-hoc hex. Serve it with `npm run
-preview` and validate in a real browser; never trust Service Studio Preview for Web
-Components.
+three layers: (1) the **real** compiled OutSystems UI CSS (`npm run build:osui`), (2) the
+two theme pastes (`dist/tokens.css` then `dist/theme.css`, in that order), (3) the `src/`
+overrides + Web Components. The preview chrome must stay token-only and class-only — no
+inline styles, no ad-hoc hex. Serve it with `npm run preview` and validate in a real
+browser; never trust Service Studio Preview for Web Components.
+
+This harness is not a convenience — **it is the fidelity gate the checker measures**. Every
+`src/blocks/*.css` must be `<link>`ed here in layer order; a stylesheet that is not loaded
+means the preview proved nothing, and the component was never actually reviewed.
 
 **The design loop (`loop/` + the plugin).** `/outsystems-loop:design-loop` (or
 `./loop/run.sh`) drives an autonomous Figma → OutSystems loop defined by `loop/goal.md`.
@@ -257,17 +283,25 @@ review, and it runs in this order:
 1. **Deterministic gate (hard wall):** `npm run build:theme` must exit 0 — which means
    `check:config` must pass first — before any subjective judgment. A broken build or an
    unfilled config is an instant FAIL.
-2. **Risk-tiered depth:** scrutiny scales to blast radius. `trivial` (utility, config) gets
+2. **Rendered-fidelity gate (hard wall):** the checker serves the preview and measures the
+   **computed** style of every value the frozen ref states, returning a MEASUREMENTS table
+   and `VISUAL: pass | drift | unverified`. Drift or unverified forbids a PASS. A correct
+   declaration in our source proves nothing — framework and provider CSS out-specify it and
+   win silently, so fidelity is what was measured, never what was read.
+3. **Risk-tiered depth:** scrutiny scales to blast radius. `trivial` (utility, config) gets
    a glance; `core` (L5 Web Components, interactive composites) gets the full stack.
-3. **Adversarial finding challenge:** every finding must survive a refutation against *real
+4. **Adversarial finding challenge:** every finding must survive a refutation against *real
    rendered usage* before it is filed. Refuted ones are recorded as `not-reproduced` in the
-   register and never become bugs. Never flag against an unconfirmed convention.
-4. **Decision-log capture:** maker and checker emit their reasoning, alternatives ruled out,
+   register and never become bugs. Never flag against an unconfirmed convention. This
+   challenge applies to **findings only** — measured drift is a fact about the build, not a
+   claim to refute; it goes back to the maker, not to a designer.
+5. **Decision-log capture:** maker and checker emit their reasoning, alternatives ruled out,
    and assumptions; these persist to `state.json` and the handover, so the human reviewer is
    not reconstructing intent.
-5. **Review metrics:** `loop/REPORT.md` carries a `## Review metrics` block each run
+6. **Review metrics:** `loop/REPORT.md` carries a `## Review metrics` block each run
    (auto-pass vs needs-human, findings filed vs challenged-out, rounds, tier coverage,
-   deterministic-gate pass rate).
+   deterministic-gate pass rate, and **rendered-fidelity coverage** — the only one of these
+   that reflects whether the build looks like the design).
 
 **Two GitHub outputs.** Design conflicts become **findings** (Bug issues, mirrored in
 `findings/findings-register.md`). Generated code becomes **handovers** (Task issues, bodies

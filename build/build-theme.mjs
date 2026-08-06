@@ -1,5 +1,16 @@
 #!/usr/bin/env node
-/* build-theme.mjs — assembles dist/theme.css from tokens/*.css.
+/* build-theme.mjs — assembles TWO ODC pastes from tokens/*.css + src/blocks/*.css:
+ *
+ *   dist/tokens.css — the design tokens ONLY: the single consolidated `:root`
+ *                     plus device-scoped token redefinitions (e.g. `body.phone`
+ *                     type steps, which ARE token definitions, just scoped).
+ *   dist/theme.css  — everything else: @font-face, base rules, utility classes,
+ *                     widget/component overrides. Carries NO tokens.
+ *
+ * Both are pasted into the ODC Theme editor. The split exists because token edits
+ * are frequent and class edits are not: re-pasting a token change should not mean
+ * re-pasting (and re-reviewing) the whole theme. Each file carries its own head,
+ * Section Index and section banners — neither is ever shipped flat.
  *
  * Sectioning follows the OutSystems UI convention (see ODC.OutSystemsUI.scss):
  * a `/*!` header, a numbered "Section Index", and `/*! ===…=== *\/` banners per
@@ -23,9 +34,16 @@
  * comments). Files with no `:root` (e.g. the color utility CLASSES) are emitted
  * after the consolidated block, each under its own banner.
  *
+ * TOKEN CHANGE REPORT — every build diffs the assembled token set against the
+ * committed baseline tokens/tokens.lock.json, prints added/modified/removed
+ * classified [branding] / [foundation] / [component], and records them newest-first
+ * in tokens/TOKEN-CHANGELOG.md. Both files are generated and tracked: commit them
+ * with the token change, never hand-edit them. A design system's tokens are its
+ * public API; a rename that lands silently is a breaking change nobody reviewed.
+ *
  * Usage:  node build/build-theme.mjs [--watch] [--ship]
  * Order of sections follows the @import order in tokens/index.css. */
-import { readFileSync, writeFileSync, mkdirSync, watch } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, watch } from "node:fs";
 import { dirname, join } from "node:path";
 import { projectConfig, root } from "./lib/project-config.mjs";
 
@@ -33,6 +51,9 @@ const cfg = projectConfig();
 const tokensDir = join(root, "tokens");
 const blocksDir = join(root, "src", "blocks");
 const outFile = join(root, "dist", "theme.css");
+const tokensOutFile = join(root, "dist", "tokens.css");
+const lockFile = join(tokensDir, "tokens.lock.json");
+const changelogFile = join(tokensDir, "TOKEN-CHANGELOG.md");
 
 /* The release version stamped at the top of dist/theme.css comes from package.json
  * — its single source of truth. Bumping a release = editing package.json "version"
@@ -56,6 +77,30 @@ const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).ver
  * `tokens/index.css` AND this table — and half-doing it silently dropped the file from
  * the theme's table of contents. One file, one declaration, one place to forget nothing. */
 const SECTION_RE = /@section\s+([^\n*/]+?)\s*(?:\/\s*([^\n*/]+?))?\s*(?:\*\/|\n)/;
+
+/* Maintenance bucket for the token change report, ALSO self-declared — a file may
+ * add `@kind branding|foundation|component` next to its `@section`:
+ *
+ *     /* @section Colors / Primitives
+ *        @kind branding *\/
+ *
+ * `branding` = the brand palette, the semantic role layer, and any framework
+ * brand retints — the tokens a brand owner signs off. `foundation` = the
+ * non-colour foundations (spacing, type, radius, border, shadow). `component` =
+ * per-component tokens. Undeclared files fall back to the filename heuristic
+ * below, so a project that never annotates anything still gets a useful report. */
+const KIND_RE = /@kind\s+(branding|foundation|component)\b/;
+const FOUNDATION_FILES = new Set(["spacing.css", "typography.css", "radius.css", "border.css", "shadows.css"]);
+const BRANDING_FILES = new Set(["colors.css", "semantic-colors.css", "semantic-colors-dark.css"]);
+
+function tokenKind(file) {
+  const declared = meta(file).kind;
+  if (declared) return declared;
+  if (BRANDING_FILES.has(file)) return "branding";
+  if (FOUNDATION_FILES.has(file)) return "foundation";
+  return "component";
+}
+
 const metaCache = new Map();
 
 /* Set once per build(): tells meta() which directory a given file came from. */
@@ -64,12 +109,15 @@ let dirOf = () => tokensDir;
 function meta(file) {
   if (metaCache.has(file)) return metaCache.get(file);
   let m = null;
+  let kind = null;
   try {
-    m = SECTION_RE.exec(readFileSync(join(dirOf(file), file), "utf8"));
+    const src = readFileSync(join(dirOf(file), file), "utf8");
+    m = SECTION_RE.exec(src);
+    kind = KIND_RE.exec(src)?.[1] ?? null;
   } catch { /* unreadable — fall through to the Misc default */ }
   const info = m
-    ? { group: m[1].trim(), name: (m[2] ?? m[1]).trim() }
-    : { group: "Misc", name: file };
+    ? { group: m[1].trim(), name: (m[2] ?? m[1]).trim(), kind }
+    : { group: "Misc", name: file, kind };
   if (!m) console.warn(`build:theme — ${file} has no  /* @section Group / Name */  header; filed under "Misc".`);
   metaCache.set(file, info);
   return info;
@@ -81,7 +129,12 @@ function meta(file) {
 function stripSectionMarker(s) {
   return s
     .replace(/^[ \t]*\/\*[ \t]*@section[^\n]*?\*\/[ \t]*\r?\n/, "")
-    .replace(/^([ \t]*\/\*)[ \t]*@section[^\n]*(\r?\n)/, "$1$2");
+    .replace(/^([ \t]*\/\*)[ \t]*@section[^\n]*(\r?\n)/, "$1$2")
+    // `@kind` on its own line — keep the comment terminator if it closed there.
+    .replace(
+      /^[ \t]*\*?[ \t]*@kind[ \t]+(?:branding|foundation|component)[ \t]*(\*\/)?[ \t]*\r?\n/m,
+      (_, close) => (close ? `${close}\n` : "")
+    );
 }
 
 const RULE = "=".repeat(78); // section-banner rule width (OutSystems UI style)
@@ -182,6 +235,9 @@ function sectionTitle(groups, file) {
 }
 
 function buildIndex({ order, map }) {
+  // A fresh project has no block CSS yet, so paste #2 is legitimately empty. Say so —
+  // an "Section Index:" with nothing under it reads as a broken build on day one.
+  if (!order.length) return "/*!\n(No sections yet — nothing in this file to paste.)\n*/";
   const lines = ["/*!", "Section Index:"];
   order.forEach((group, i) => {
     const n = i + 1;
@@ -268,67 +324,271 @@ function splitRoot(body) {
   };
 }
 
+/* Extract `--name: value` declarations from a declaration block (comments
+ * stripped, whitespace collapsed). Token values never contain a `;` (no data
+ * URLs in tokens), so splitting on `;` is safe. */
+function extractDecls(block) {
+  const decls = [];
+  for (const part of block.replace(/\/\*[\s\S]*?\*\//g, "").split(";")) {
+    const m = /^\s*(--[\w-]+)\s*:\s*([\s\S]+?)\s*$/.exec(part);
+    if (m) decls.push({ name: m[1], value: m[2].replace(/\s+/g, " ") });
+  }
+  return decls;
+}
+
+/* Partition a file's trailing chunk (top-level rules after its :root) into
+ * TOKEN rules — every declaration is a custom property, e.g. the `body.tablet` /
+ * `body.phone` responsive type steps — and STYLE rules (everything else, e.g. a
+ * `html, body` base type rule). Token rules ship in dist/tokens.css: they ARE
+ * token definitions, merely device-scoped, and a project that splits the two
+ * pastes must not strand half its type ramp in the other file. Style rules ship
+ * in dist/theme.css. Comments preceding a rule travel with that rule; rules with
+ * nested braces are treated as style. */
+function partitionTrailing(trailing) {
+  const tokenParts = [];
+  const styleParts = [];
+  const tokenRules = []; // [{selector, body}] for the change report
+  if (!trailing) return { token: "", style: "", tokenRules };
+  let i = 0;
+  let pending = ""; // comment block(s) preceding the next rule
+  while (i < trailing.length) {
+    if (/\s/.test(trailing[i])) { i++; continue; }
+    if (trailing[i] === "/" && trailing[i + 1] === "*") {
+      const end = trailing.indexOf("*/", i + 2);
+      const stop = end === -1 ? trailing.length : end + 2;
+      pending += (pending ? "\n" : "") + trailing.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    const rel = firstRuleBrace(trailing.slice(i));
+    if (rel === -1) { // stray non-rule text — keep it on the style side verbatim
+      styleParts.push((pending ? pending + "\n" : "") + trailing.slice(i).trim());
+      pending = "";
+      break;
+    }
+    const open = i + rel;
+    const close = matchingBrace(trailing, open);
+    const stop = close === -1 ? trailing.length : close + 1;
+    const rule = trailing.slice(i, stop);
+    const body = trailing.slice(open + 1, close === -1 ? trailing.length : close);
+    const bare = body.replace(/\/\*[\s\S]*?\*\//g, "");
+    const isToken =
+      !bare.includes("{") &&
+      bare.split(";").every((d) => { const t = d.trim(); return !t || t.startsWith("--"); });
+    if (isToken) {
+      tokenParts.push((pending ? pending + "\n" : "") + rule);
+      tokenRules.push({ selector: trailing.slice(i, open).trim().replace(/\s+/g, " "), body });
+    } else {
+      styleParts.push((pending ? pending + "\n" : "") + rule);
+    }
+    pending = "";
+    i = stop;
+  }
+  if (pending) styleParts.push(pending); // orphan trailing comment
+  return { token: tokenParts.join("\n\n"), style: styleParts.join("\n\n"), tokenRules };
+}
+
+/* ---- Token change report (branding / foundation / component) ------------- */
+
+/* Diff the assembled token set against tokens/tokens.lock.json, print the
+ * classified changes, record them in tokens/TOKEN-CHANGELOG.md (newest first),
+ * and rewrite the lock. `tokens` = { "<scope> <name>": { value, file, kind } },
+ * scope being `:root` or a device class like `body.phone`. Last declaration wins
+ * for a duplicate scope+name, which matches the cascade of the assembled sheet. */
+function reportTokenChanges(tokens) {
+  const KINDS = ["branding", "foundation", "component"];
+  const stamp = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  const sortedLock = () => {
+    const out = {};
+    for (const k of Object.keys(tokens).sort()) out[k] = tokens[k];
+    return JSON.stringify({ version, tokens: out }, null, 2) + "\n";
+  };
+
+  if (!existsSync(lockFile)) {
+    // First run on a fresh project: seed the baseline. Do NOT list every token as
+    // "added" — a wall of additions on day one trains people to skip the report.
+    writeFileSync(lockFile, sortedLock());
+    const counts = KINDS.map(
+      (k) => `${Object.values(tokens).filter((t) => t.kind === k).length} ${k}`
+    ).join(" · ");
+    const entry = `## ${stamp} — v${version} — baseline\n\nBaseline created: ${Object.keys(tokens).length} tokens (${counts}).\n`;
+    writeChangelogEntry(entry);
+    console.log(`Token baseline created: ${Object.keys(tokens).length} tokens (${counts}) → tokens/tokens.lock.json`);
+    return { added: 0, modified: 0, removed: 0 };
+  }
+
+  const prev = JSON.parse(readFileSync(lockFile, "utf8")).tokens ?? {};
+  const changes = []; // {sign, kind, line}
+  for (const key of Object.keys(tokens).sort()) {
+    const cur = tokens[key];
+    const old = prev[key];
+    const label = key.startsWith(":root ") ? key.slice(6) : key;
+    if (!old) {
+      changes.push({ sign: "+", kind: cur.kind, line: `\`${label}\`: \`${cur.value}\` _(${cur.file})_` });
+    } else if (old.value !== cur.value) {
+      changes.push({ sign: "~", kind: cur.kind, line: `\`${label}\`: \`${old.value}\` → \`${cur.value}\` _(${cur.file})_` });
+    } else if (old.file !== cur.file) {
+      changes.push({ sign: "~", kind: cur.kind, line: `\`${label}\`: moved ${old.file} → ${cur.file}` });
+    }
+  }
+  for (const key of Object.keys(prev).sort()) {
+    if (!tokens[key]) {
+      const label = key.startsWith(":root ") ? key.slice(6) : key;
+      changes.push({ sign: "−", kind: prev[key].kind, line: `\`${label}\` (was \`${prev[key].value}\`, ${prev[key].file})` });
+    }
+  }
+
+  const tally = { added: 0, modified: 0, removed: 0 };
+  for (const c of changes) tally[c.sign === "+" ? "added" : c.sign === "~" ? "modified" : "removed"]++;
+
+  if (!changes.length) {
+    console.log("Token changes since last build: none");
+    return tally;
+  }
+
+  console.log("Token changes since last build:");
+  for (const kind of KINDS) {
+    for (const c of changes.filter((x) => x.kind === kind)) {
+      const plain = c.line.replace(/[`_]/g, "").replace(/\((?=[\w-]+\.css\)$)/, "(");
+      console.log(`  [${kind.padEnd(10)}] ${c.sign} ${plain}`);
+    }
+  }
+
+  const entryLines = [`## ${stamp} — v${version}`, ""];
+  for (const kind of KINDS) {
+    for (const c of changes.filter((x) => x.kind === kind)) entryLines.push(`- **[${kind}]** ${c.sign} ${c.line}`);
+  }
+  writeChangelogEntry(entryLines.join("\n") + "\n");
+  writeFileSync(lockFile, sortedLock());
+  console.log(
+    `→ tokens/TOKEN-CHANGELOG.md updated (${tally.added} added, ${tally.modified} modified, ${tally.removed} removed); tokens/tokens.lock.json rewritten`
+  );
+  return tally;
+}
+
+const CHANGELOG_HEADER = `# Token Changelog
+
+Auto-generated by \`npm run build:theme\` — every build diffs the assembled design
+tokens against the \`tokens/tokens.lock.json\` baseline and records added (+),
+modified (~) and removed (−) tokens here, newest first, classified
+**branding** / **foundation** / **component**. Do not edit by hand.
+`;
+
+/* Prepend a new entry directly under the header (newest first). */
+function writeChangelogEntry(entry) {
+  const existing = existsSync(changelogFile) ? readFileSync(changelogFile, "utf8") : CHANGELOG_HEADER;
+  const at = existing.indexOf("\n## ");
+  const head = at === -1 ? existing.replace(/\n*$/, "\n") : existing.slice(0, at + 1);
+  const rest = at === -1 ? "" : existing.slice(at + 1);
+  writeFileSync(changelogFile, `${head}\n${entry.replace(/\n*$/, "\n")}${rest ? "\n" + rest : ""}`);
+}
+
+/* --------------------------------------------------------------------------- */
+
 function build() {
   const tokenFiles = importOrder();
   const blockFiles = blocksOrder();
   const files = [...tokenFiles, ...blockFiles];
-  metaCache.clear(); // --watch: a file's @section header may have changed
+  metaCache.clear(); // --watch: a file's @section / @kind header may have changed
   dirOf = (file) => (blockFiles.includes(file) ? blocksDir : tokensDir);
-  const groups = groupFiles(files);
   const stamp = new Date().toISOString().slice(0, 10);
-  const head = [
-    "/*!",
-    `${cfg.customer} · "${cfg.designSystemName}" Design System — Theme`,
-    `Version ${version} · built ${stamp}   (see CHANGELOG.md)`,
-    "Generated from tokens/*.css — do not edit directly. Rebuild: npm run build:theme.",
-    "Paste the contents below into the ODC Theme editor.",
-    "*/",
-    "",
-    buildIndex(groups),
-  ].join("\n");
 
-  const preRootSections = []; // top-level rules that must precede :root (e.g. @font-face)
-  const rootSections = []; // declarations lifted into the single consolidated :root
-  const tailSections = []; // files with no :root (e.g. utility classes, block overrides)
-  const hoisted = [];      // external @import url() lines, lifted to the top
+  /* First pass: read + split every file, deciding which output(s) it feeds. */
+  const parts = [];
+  const hoisted = []; // external @import url() lines → top of dist/theme.css
   for (const file of files) {
-    const title = `${sectionNumber(groups, file)}. ${sectionTitle(groups, file)}`;
     const raw = stripSectionMarker(readFileSync(join(dirOf(file), file), "utf8")).trimEnd();
     const { stripped, imports } = extractHoistedImports(raw);
     hoisted.push(...imports);
     const body = stripped.trimEnd();
     const { preamble, hoist, inner, trailing } = splitRoot(body);
+    const { token: tokenTrailing, style: styleTrailing, tokenRules } = partitionTrailing(trailing);
+    parts.push({ file, body, preamble, hoist, inner, tokenTrailing, styleTrailing, tokenRules });
+  }
+
+  /* Which files contribute sections to which document — the Section Index is
+   * numbered per document, so a file absent from one doesn't leave a gap in it. */
+  const tokenDocFiles = parts.filter((p) => p.inner !== null || p.tokenTrailing).map((p) => p.file);
+  const themeDocFiles = parts.filter((p) => p.hoist || p.inner === null || p.styleTrailing).map((p) => p.file);
+  const tokenGroups = groupFiles(tokenDocFiles);
+  const themeGroups = groupFiles(themeDocFiles);
+  const titleIn = (groups, file) => `${sectionNumber(groups, file)}. ${sectionTitle(groups, file)}`;
+
+  /* Second pass: assemble both documents + collect the token set for the report. */
+  const rootSections = [];      // tokens.css — declarations lifted into the single :root
+  const tokenTailSections = []; // tokens.css — device-scoped token redefinitions
+  const preRootSections = [];   // theme.css — top-level rules hoisted from before a :root (@font-face)
+  const tailSections = [];      // theme.css — class files + trailing style rules
+  const tokens = {};            // "<scope> <name>" → { value, file, kind } (last wins, like the cascade)
+  for (const p of parts) {
+    const kind = tokenKind(p.file);
     // Pre-:root rules (e.g. @font-face) carry their own explanatory comment; emit
     // them at top level so they are valid CSS, not buried inside the merged :root.
-    if (hoist) preRootSections.push(`${banner(title)}\n\n${hoist}`);
-    if (inner === null) {
-      tailSections.push(`${banner(title)}\n\n${body}`);
+    if (p.hoist) preRootSections.push(`${banner(titleIn(themeGroups, p.file))}\n\n${p.hoist}`);
+    if (p.inner === null) {
+      tailSections.push(`${banner(titleIn(themeGroups, p.file))}\n\n${p.body}`);
     } else {
-      const parts = [banner(title)];
-      if (preamble) parts.push(preamble);
-      parts.push(inner);
-      rootSections.push(parts.join("\n\n"));
+      const sect = [banner(titleIn(tokenGroups, p.file))];
+      if (p.preamble) sect.push(p.preamble);
+      sect.push(p.inner);
+      rootSections.push(sect.join("\n\n"));
+      for (const d of extractDecls(p.inner)) tokens[`:root ${d.name}`] = { value: d.value, file: p.file, kind };
     }
-    // Post-:root rules (e.g. typography.css's `html, body` + `body.phone` responsive
-    // blocks) must also stay top level — folding them into the merged :root nests
-    // every later component token inside `body.phone`. Emit after the consolidated root.
-    if (trailing) tailSections.push(`${banner(title)}\n\n${trailing}`);
+    // Post-:root rules must stay top level — folding them into the merged :root
+    // nests every later component token inside e.g. `body.phone`. Device-scoped
+    // TOKEN rules go to tokens.css; real style rules go to theme.css.
+    if (p.tokenTrailing) {
+      tokenTailSections.push(`${banner(titleIn(tokenGroups, p.file))}\n\n${p.tokenTrailing}`);
+      for (const r of p.tokenRules)
+        for (const d of extractDecls(r.body)) tokens[`${r.selector} ${d.name}`] = { value: d.value, file: p.file, kind };
+    }
+    if (p.styleTrailing) tailSections.push(`${banner(titleIn(themeGroups, p.file))}\n\n${p.styleTrailing}`);
   }
   const rootBlock = `:root {\n${rootSections.join("\n\n\n")}\n}`;
 
+  const tokensHead = [
+    "/*!",
+    `${cfg.customer} · "${cfg.designSystemName}" Design System — Design Tokens`,
+    `Version ${version} · built ${stamp}   (see CHANGELOG.md + tokens/TOKEN-CHANGELOG.md)`,
+    "Generated from tokens/*.css — do not edit directly. Rebuild: npm run build:theme.",
+    "Design tokens ONLY (single :root + device-scoped redefinitions). Paste #1 of 2",
+    "into the ODC Theme editor — the classes/overrides live in dist/theme.css (paste both).",
+    "*/",
+    "",
+    buildIndex(tokenGroups),
+  ].join("\n");
+
+  const themeHead = [
+    "/*!",
+    `${cfg.customer} · "${cfg.designSystemName}" Design System — Theme (classes & overrides)`,
+    `Version ${version} · built ${stamp}   (see CHANGELOG.md)`,
+    "Generated from tokens/*.css + src/blocks/*.css — do not edit directly. Rebuild: npm run build:theme.",
+    "Carries NO design tokens — those live in dist/tokens.css. Paste #2 of 2 into",
+    "the ODC Theme editor (paste both).",
+    "*/",
+    "",
+    buildIndex(themeGroups),
+  ].join("\n");
+
   // Dedupe hoisted imports (first occurrence wins) and place them above everything.
   const importBlock = [...new Set(hoisted)].join("\n");
-  const docHead = importBlock ? `${importBlock}\n\n\n${head}` : head;
+  const themeDocHead = importBlock ? `${importBlock}\n\n\n${themeHead}` : themeHead;
 
   const ship = process.argv.includes("--ship");
-  let out = [docHead, ...preRootSections, rootBlock, ...tailSections].join("\n\n\n") + "\n";
-  if (ship) out = stripNotes(out);
+  let tokensOut = [tokensHead, rootBlock, ...tokenTailSections].join("\n\n\n") + "\n";
+  let themeOut = [themeDocHead, ...preRootSections, ...tailSections].join("\n\n\n") + "\n";
+  if (ship) {
+    tokensOut = stripNotes(tokensOut);
+    themeOut = stripNotes(themeOut);
+  }
 
   mkdirSync(dirname(outFile), { recursive: true });
-  writeFileSync(outFile, out);
+  writeFileSync(tokensOutFile, tokensOut);
+  writeFileSync(outFile, themeOut);
   console.log(
-    `build:theme${ship ? ":ship" : ""} → dist/theme.css (${hoisted.length ? "1 @import, " : ""}${preRootSections.length ? `${preRootSections.length} pre-root, ` : ""}1 :root, ${rootSections.length} token sections, ${tailSections.length} class sections${ship ? "; notes stripped, TOC + banners kept" : ""})`
+    `build:theme${ship ? ":ship" : ""} → dist/tokens.css (1 :root, ${Object.keys(tokens).length} tokens, ${rootSections.length}+${tokenTailSections.length} sections) + dist/theme.css (${hoisted.length ? "1 @import, " : ""}${preRootSections.length} pre-root, ${tailSections.length} class sections${ship ? "; notes stripped, TOC + banners kept" : ""})`
   );
+  reportTokenChanges(tokens);
 }
 
 build();

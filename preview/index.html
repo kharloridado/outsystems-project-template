@@ -19,8 +19,10 @@
        checked against the real base rather than an approximation. (The first version of
        this harness used a hand-written "native baseline" stub. It had to be ripped out:
        a stub agrees with whatever you already assumed.)
-    2) Brand theme tokens — dist/theme.css, which retints OutSystems UI's own CSS
-       variables. Build with `npm run build:theme`.
+    2) The brand theme — the SAME two files pasted into ODC, in the SAME order:
+       dist/tokens.css (the design tokens, which retint OutSystems UI's own CSS variables)
+       then dist/theme.css (classes + overrides). Build both with `npm run build:theme`.
+       Order matters here exactly as it does in the Theme editor.
     3) Provider stylesheets — anything the platform injects at runtime (date pickers,
        select widgets…). Vendor them under preview/vendor/ so the preview sees the same
        DOM and the same specificity the provider actually emits.
@@ -45,7 +47,8 @@
 <!-- 1) Real OutSystems UI framework base. Regenerate with `npm run build:osui`. -->
 <link rel="stylesheet" href="vendor/outsystems-ui/outsystems-ui.css">
 
-<!-- 2) Brand theme tokens. Regenerate with `npm run build:theme`. -->
+<!-- 2) The brand theme — both ODC pastes, tokens first. Regenerate with `npm run build:theme`. -->
+<link rel="stylesheet" href="../dist/tokens.css">
 <link rel="stylesheet" href="../dist/theme.css">
 
 <!-- 3) Provider stylesheets (runtime-injected in ODC). Vendor them here as you adopt them.
@@ -70,7 +73,7 @@
         <li><code>git submodule update --init</code> — then pin <code>vendor/outsystems-ui</code>
             to the OutSystems UI version your target ODC environment actually runs.</li>
         <li><code>npm run build:osui</code> — compile the framework base (layer 1).</li>
-        <li><code>npm run build:theme</code> — build the brand theme (layer 2).</li>
+        <li><code>npm run build:theme</code> — build the brand theme, both pastes (layer 2).</li>
         <li><code>npm run preview</code> — serve this page and check it in a real browser.</li>
       </ol>
       <p>
