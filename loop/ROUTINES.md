@@ -25,7 +25,7 @@ NOT rebuild components. End with a 5-line summary.
 
 ---
 
-## 2. Nightly loop-advance  (inventory mode only — see the warning under §4)
+## 2. Nightly loop-advance  (the cloud driver — queues from files, never from a board)
 **Trigger:** nightly (02:00).
 **Prompt:**
 ```
@@ -52,40 +52,68 @@ Make NO changes to any issue.
 
 ---
 
-## 4. Ship approved deliverables  (board mode — the one board stage that belongs in the cloud)
-**Trigger:** hourly during working hours, or on demand.
-**Prompt:**
-```
-Follow the /outsystems-loop:board-ship skill procedure for this repo. Ship up to 5
-Approved cards from the GitHub Project board named in project.config.json -> board:
-for each, open a PR from its build branch, squash-merge it into main, VERIFY the PR
-reads MERGED before doing anything else, then open the handover Task and move the card
-to Handover. If a merge did not complete — a required check failed, or gh armed
-auto-merge instead of merging — leave the card in Approved, comment the PR link and the
-mergeStateStatus, and move on. Never pass --admin. Never move a card to Approved or
-Done. Never create a handover for work that is not on main. End with a 5-line summary
-naming anything left in Approved and why.
-```
+## 4. Board → files sync  (**GitHub Actions, NOT a Claude routine**)
+**Trigger:** `.github/workflows/board-sync.yml` — every 15 min during working hours, plus
+`workflow_dispatch`. Locally: `npm run sync:board` (`:dry` to look first).
 
-This is safe in the cloud precisely because it needs **no Figma and no browser**: `gh pr create --head`
-and `gh pr merge` are server-side, so it needs no working tree of the item's content either.
+The answer to *"I moved a card; does the loop know?"* Before this existed the answer was no, and
+there was no way to find out except asking why the nightly run ignored a card.
+
+**It cannot be a Claude routine.** Projects v2 is GraphQL-only and unreachable from a cloud
+session — no `gh`, no `project_*` MCP tool, no GraphQL passthrough, egress proxy refuses
+`api.github.com/graphql`. Actions runs on GitHub's own infrastructure where it is an ordinary
+request. Actions reads the board and writes plain files; the routine reads plain files.
+
+**It polls because there is nothing to subscribe to.** `projects_v2_item` fires for
+**organization** projects only; a user-owned project has no event.
+
+Everything it changes arrives as **one PR**, and merging it is the signature. The mirror cannot be
+pushed straight to `main` when `main` has a required check — a direct push is rejected with
+`GH006`, because a protected branch admits no unreviewed commit however harmless.
+
+**Setup:** a CLASSIC PAT with the `project` scope, stored as repo secret `BOARD_SYNC_TOKEN`. The
+Actions `GITHUB_TOKEN` cannot read a user-owned Projects v2 board at all. A **fine-grained** PAT
+returns an empty result rather than an error, which is indistinguishable from a missing board.
 
 ---
 
-## 5. Board reconcile + deliverables snapshot  (board mode)
-**Trigger:** weekly (Fri 17:00).
-**Prompt:**
-```
-Follow the /outsystems-loop:board-sync skill procedure for this repo. Reconcile
-loop/state.json against the board and against git, and regenerate deliverables.md from
-the board. Report drift you corrected and anything you could not explain — especially
-any card in Handover whose branch is not an ancestor of main, which means the board is
-claiming work shipped when it did not. Do NOT reclaim stale claims on this schedule and
-do NOT move any card. Rewrite the cache, never the board.
-```
+## 5. Approved → shipped  (**GitHub Actions, NOT a Claude routine**)
+**Trigger:** `.github/workflows/board-ship.yml` — hourly during working hours;
+`workflow_dispatch` defaults to dry-run. Locally: `npm run ship:board:dry`.
 
-Reclaiming is deliberately excluded from the schedule: run `--reclaim-stale` by hand, when you know a run
-actually died.
+For each card in `Approved`: squash-merge its PR, open the handover Task, move the card to
+`Handover`.
+
+**This section used to say board-ship was "the one board stage that belongs in the cloud."** That
+was wrong, and it was expensive: moving a card is a Projects v2 mutation, so a cloud routine could
+never do it. Measured on the source project — the hourly cloud board-ship fired nine times a
+weekday and every run was a guaranteed no-op, for days, while looking healthy.
+
+**It refuses more than it ships**, and each refusal is a silent-corruption story: an item not
+`built`/`approved` was never validated; a draft/closed/changes-requested PR is not finished; checks
+that are red, still running, **or absent entirely** mean the head was never re-verified; a missing
+handover body would tell a developer to paste nothing.
+
+**It is self-healing:** a PR already merged — a crashed run, or a hand merge — is *finished* rather
+than refused. Handover Tasks are deduplicated by title.
+
+**Setup:** `BOARD_SYNC_TOKEN` needs the full **`project`** scope here (moving a card writes a field
+value), not just `read:project`.
+
+---
+
+## Environment gotchas that cost real nights
+
+Each of these produced a run that looked healthy and delivered nothing.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Every item FAILs the fidelity gate | `vendor/outsystems-ui` is a submodule; a fresh clone gets it **empty**, so the framework stylesheet is never compiled. A missing stylesheet does not throw — the cascade falls back and every measurement is a plausible number describing a page nobody will see. `unverified` caps at FAIL. | Pre-flight: `npm ci && git submodule update --init vendor/outsystems-ui && npm run build:osui` |
+| Run produces nothing, no refs frozen | No Figma connector attached to the routine. No ref can be frozen, so every item goes `needs-human` rather than being built from a guess. | Attach it in the routine's settings |
+| `@<plugin>:maker` / `:checker` unavailable; falls back to general-purpose agents | The plugin marketplace repo is **private**. A cloud container has none of your credentials, so it cannot clone it and `installed_plugins.json` stays empty. | Make the marketplace repo public |
+| Sync PR never merges: "waiting for approval" | GitHub gates workflow runs on PRs authored by `github-actions[bot]` — **once**. | Approve the first one; subsequent runs are trusted |
+| Actions cannot open the PR at all | Repo setting "Allow GitHub Actions to create and approve pull requests" is off | Enable it. Check first whether approvals gate anything: if `required_pull_request_reviews` is absent, this grants only the *create* half |
+| `figma.png` cannot be saved in a cloud run | Egress policy blocks `www.figma.com` (403 on CONNECT), even though the Figma **MCP tools** work | Freeze the ref from `get_design_context` + `get_variable_defs` and record the gap; do not claim a visual check you did not make |
 
 ---
 

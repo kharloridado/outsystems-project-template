@@ -1,6 +1,5 @@
 {
   "$comment": "The single source of truth for this project's values. Build scripts read it via build/lib/project-config.mjs; the maker/checker agents read it directly. Nothing else should restate these values. Run `npm run init` to fill it in.",
-
   "customer": "<<CUSTOMER>>",
   "project": "<<PROJECT>>",
   "designSystemName": "<<DESIGN_SYSTEM_NAME>>",
@@ -9,32 +8,41 @@
   "odcThemeModule": "<<ODC_THEME_MODULE>>",
   "repo": "<<OWNER/REPO>>",
   "environment": "ODC",
-
   "figma": {
     "fileKey": "<<FIGMA_FILE_KEY>>",
     "url": "<<FIGMA_URL>>"
   },
-
   "board": {
-    "$comment": "The GitHub Project board that DRIVES the loop in board-driven mode (see WORKFLOW.md). Board mode is ON iff both `owner` and `number` are set; leave them null to run the loop from loop/goal.md's signed inventory instead. This block lives here, not in loop/state.json, because a board pointer is a project VALUE and state.json is explicitly a cache — hand-filling a cache is the anti-pattern this file exists to kill. Derived ids (project node id, field ids, single-select option ids) are NOT here: they are cached in loop/state.json.board_cache with a fetched_at. `owners` is load-bearing for safety: only comments authored by these logins are read as spec, and everything else on a card is untrusted input.",
+    "$comment": "The GitHub Project board. TWO SEPARATE THINGS live here and must not be conflated: the POINTER (owner/number/url/owners — WHERE the board is, all-or-nothing) and the MODE (drivesLoop — WHETHER the board is the loop's work queue). Splitting them is what lets the board stay a human view while the loop queues from somewhere a scheduled cloud run can actually read. This block lives here, not in loop/state.json, because a board pointer is a project VALUE and state.json is explicitly a cache — hand-filling a cache is the anti-pattern this file exists to kill. Derived ids (project node id, field ids, single-select option ids) are NOT here: they are cached in loop/state.json.board_cache with a fetched_at. owners is load-bearing for safety: only comments authored by these logins are read as spec, and everything else on a card is untrusted input.",
     "owner": null,
     "number": null,
     "url": null,
     "owners": [],
+    "drivesLoop": false,
+    "$comment_drivesLoop": "FALSE by default, and this is the one setting that decides whether cloud routines can run at all. Projects v2 is GraphQL-only: a cloud session has no gh on PATH, the cloud GitHub MCP exposes no project_* tool and no GraphQL passthrough, and raw GraphQL to api.github.com is refused by the egress proxy. So a board-queued loop cannot claim a card in the cloud — it fails before it reaches the maker, every run, silently (measured on the source project: an hourly board routine fired nine times a weekday, every run a guaranteed no-op). With drivesLoop false the queue is the signed inventory in loop/goal.md — plain files that arrive with the clone, readable from anywhere. Issues, branches, commits and PRs are unaffected: those are REST and work in a routine. The bridge that carries board lanes INTO those files is .github/workflows/board-sync.yml, which runs in GitHub Actions where Projects v2 IS reachable. Set true ONLY for a loop you intend to run exclusively on a local machine with gh auth refresh -s project.",
     "staleAfterMinutes": 120,
     "shipBase": "main"
   },
-
   "conventions": {
     "$comment": "THREE-STATE, never a bare value. status: confirmed | assumed | TBD. A convention that is not `confirmed` is NOT A RULE: the checker must not enforce it and must not raise findings against it. This exists because a previous template shipped `Spacing base: 4pt` as a plausible default nobody had verified — the loop then flagged every value that wasn't a multiple of 4, manufacturing false-positive findings and a bug that had to be closed as not-planned. A credible-looking default is worse than a blank. Promote to `confirmed` only when the designer or brand owner has actually said so.",
-    "spacingBase": { "value": null, "status": "TBD" },
-    "grid": { "value": null, "status": "TBD" },
-    "breakpoints": { "value": null, "status": "TBD" },
-    "defaultComponentSize": { "value": null, "status": "TBD" }
+    "spacingBase": {
+      "value": null,
+      "status": "TBD"
+    },
+    "grid": {
+      "value": null,
+      "status": "TBD"
+    },
+    "breakpoints": {
+      "value": null,
+      "status": "TBD"
+    },
+    "defaultComponentSize": {
+      "value": null,
+      "status": "TBD"
+    }
   },
-
   "knownFalsePositiveClasses": [],
-
   "findings": {
     "ticketing": "github",
     "ticketTarget": "<<OWNER/REPO>>",

@@ -375,8 +375,26 @@ function wcGeneric(block, tag, jsFile, dest) {
   ].join("\n");
 }
 
-// Native-widget restyle prompt: most work is using the right widget + Extended Class.
-function restyleGeneric(block, cssFile) {
+/* Native-widget restyle prompt: most work is using the right widget + Extended Class.
+ *
+ * `variantGuidance` exists because the generic step 2 is WRONG for any component whose variants
+ * are mostly reachable through the widget's own properties. Button is the case that proved it:
+ * Style = Default/Primary/Success/Error/Cancel and Size = Large already emit the classes the CSS
+ * restyles, so only five variants need an Extended Class at all — and the handover said so, in
+ * detail, until re-running this generator replaced it with `ExtendedClass = "<documented-
+ * modifier>"`.
+ *
+ * That is a silent downgrade of a correct instruction to a placeholder, in a file whose whole
+ * job is telling a developer exactly what to do, produced by a command CLAUDE.md tells you to
+ * re-run after editing any handed-over source. Supply `mentor.variantGuidance` (an array of
+ * lines) for any component where the widget's own properties carry variants. */
+function restyleGeneric(block, cssFile, variantGuidance) {
+  const step2 = variantGuidance?.length
+    ? variantGuidance
+    : [
+        `2. Apply each variant via the Extended Class property only (e.g. ExtendedClass =`,
+        `   "<documented-modifier>") — never mutate OutSystems UI internals.`,
+      ];
   return [
     `Goal: In ODC Studio, apply the ${DS} styling for ${block} to the native`,
     `OutSystems UI widget(s) it restyles.`,
@@ -389,8 +407,7 @@ function restyleGeneric(block, cssFile) {
     `widget, not generating styles. Referencing elements by name:`,
     `1. Use the native OutSystems widget this maps to (see this handover's "When to use" /`,
     `   "Variant mapping" section), not a custom element.`,
-    `2. Apply each variant via the Extended Class property only (e.g. ExtendedClass =`,
-    `   "<documented-modifier>") — never mutate OutSystems UI internals.`,
+    ...step2,
     `3. Build any screen/Block logic the screen needs around it.`,
     ``,
     `Constraints: never edit the OutSystems UI module; add no CSS or hard-coded values. After`,
@@ -435,7 +452,7 @@ function mentorPrompt(md, entry) {
     const tag = (m && m.tag) || basename(jsArt[0], ".js");
     return refGeneric(block, tag, basename(jsArt[0]));
   }
-  return restyleGeneric(block, basename(cssArt[0]));
+  return restyleGeneric(block, basename(cssArt[0]), m && m.variantGuidance);
 }
 
 function mentorSection(md, entry) {

@@ -1,0 +1,157 @@
+# Board → files sync.
+#
+# The board is a HUMAN VIEW (project.config.json → board.drivesLoop is false). The loop queues
+# from files: loop/goal.md's signed inventory + loop/state.json items[].status. This workflow
+# is the bridge that keeps those files honest about what the board says, so a card you drag
+# actually reaches the nightly routine.
+#
+# WHY A POLL AND NOT A WEBHOOK. `projects_v2_item` — the event for board activity — fires for
+# ORGANISATION projects only. A USER-owned project has no such event to subscribe to
+# and no `on: projects_v2_item` trigger available to us. Polling is the only mechanism GitHub
+# offers for this board, not a shortcut.
+#
+# WHY IT RUNS HERE AND NOT IN THE NIGHTLY ROUTINE. Projects v2 is GraphQL-only and unreachable
+# from a Claude Code cloud routine (no gh, no project_* MCP tool, no GraphQL passthrough, raw
+# GraphQL to api.github.com refused by the egress proxy). Actions runs on GitHub's own
+# infrastructure with no such restriction. Actions reads the board and commits plain files;
+# the routine reads plain files. Neither one has to do the thing it cannot do.
+#
+# WHAT IT PRODUCES: exactly one PR, rebuilt from main every run, carrying both
+#   mirror   items[].board_status + deliverables.md  → a projection; no queue reads it
+#   promote  items[].status = "queued"               → the queue change itself
+#
+# MERGING THAT PR IS THE SIGNATURE. loop/goal.md is explicit that a lane queues nothing: a drag
+# on the board starts no build by itself, because Projects v2 does not expose WHO moved a card,
+# so a lane is not a signature. A merge is, and git log records the author.
+#
+# The mirror used to be committed straight to main as a separate, always-safe track. It cannot
+# be: main requires the `verify` status check, and a direct push is rejected with GH006
+# "Required status check is expected" — a protected branch admits no unreviewed commit, however
+# harmless. Folding both tracks into one PR keeps main protected and costs only that
+# deliverables.md is current after a merge rather than within 15 minutes. Nothing queues off it.
+#
+# THE REVIEW CHANNEL. Dragging a card from `Ready for Review` back to `Ready` re-queues it as
+# REWORK: the promotion PR carries it as a rework row, and the nightly loop rebuilds the item
+# against the frozen Figma ref PLUS your comments on the issue/PR. Leave the comment BEFORE
+# you drag — a re-queue with nothing to act on burns a full maker/checker round reproducing
+# the same output. Only comments from `board.owners` count as requirements.
+#
+# SETUP (once):
+#   1. Create a CLASSIC PAT with the `project` scope (the Actions GITHUB_TOKEN CANNOT read a
+#      user-owned Projects v2 board — this is the only reason a PAT is needed). A fine-grained
+#      PAT returns an empty result rather than an error, which is indistinguishable from a
+#      missing board.
+#   2. gh secret set BOARD_SYNC_TOKEN --repo <owner>/<repo>
+#   The PAT is used ONLY for the GraphQL read. Commits and PRs use the built-in GITHUB_TOKEN.
+name: board-sync
+
+on:
+  schedule:
+    # Every 15 minutes during working hours only — 09:00–18:00 America/New_York, Mon–Fri.
+    #
+    # Actions cron is ALWAYS UTC and has no timezone or DST support, so the window is written
+    # as 13:00–23:59 UTC to cover the hours in both offsets: EDT is UTC-4 (09:00 ET = 13:00
+    # UTC) and EST is UTC-5 (09:00 ET = 14:00 UTC). The cost of the extra hour at each end is
+    # a few no-op runs; the cost of pinning one offset is the sync going dark for an hour
+    # every working morning for four months of the year.
+    #
+    # GitHub delays or drops scheduled runs under load, and disables schedules entirely after
+    # 60 days with no repo activity — treat this as "usually within ~20 minutes", never as a
+    # guarantee. Run it by hand from the Actions tab any time you need it now.
+    - cron: "*/15 13-23 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never let two syncs rebuild the branch at once. Do not cancel a run in flight — it may be
+# mid-push.
+concurrency:
+  group: board-sync
+  cancel-in-progress: false
+
+env:
+  # One long-lived branch, force-rebuilt from main each run, backing one long-lived PR.
+  BRANCH: board-sync/sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The whole design assumes the board is a view, not the queue. If someone flips
+      # drivesLoop back to true, this workflow's promotion PR and board-advance would be two
+      # queues racing each other — stop instead.
+      - name: Guard — board.drivesLoop must be false
+        run: |
+          if [ "$(node -p "require('./project.config.json').board?.drivesLoop === true")" = "true" ]; then
+            echo "::error::board.drivesLoop is true — the board is the queue, so board-advance owns promotion. Disable this workflow or set drivesLoop back to false."
+            exit 1
+          fi
+
+      - name: Guard — the PAT is present
+        env:
+          BOARD_SYNC_TOKEN: ${{ secrets.BOARD_SYNC_TOKEN }}
+        run: |
+          if [ -z "$BOARD_SYNC_TOKEN" ]; then
+            echo "::error::secret BOARD_SYNC_TOKEN is not set. Create a classic PAT with the read:project scope and run: gh secret set BOARD_SYNC_TOKEN --repo ${{ github.repository }}"
+            exit 1
+          fi
+
+      - name: Build the sync branch
+        id: sync
+        env:
+          BOARD_SYNC_TOKEN: ${{ secrets.BOARD_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Always rebuild from current main, so a merged or stale sync never lingers and the PR
+          # only ever contains what the board says RIGHT NOW.
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+
+          node build/sync-board.mjs --promote --pr-body "$RUNNER_TEMP/pr-body.md"
+
+          if git diff --quiet -- loop/state.json deliverables.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "board and files already agree — nothing to open"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          git add loop/state.json deliverables.md
+          git commit -m "chore(board): sync board lanes into state.json + deliverables.md"
+          # Plain --force, not --force-with-lease: the branch is rebuilt from main every run and
+          # is owned exclusively by this workflow (see the concurrency group), so there is no
+          # other writer to lose a race with — and a lease needs a remote-tracking ref we
+          # deliberately do not fetch.
+          git push --force origin "$BRANCH"
+
+      - name: Open or refresh the sync PR
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/pr-body.md"
+            echo "refreshed the open sync PR"
+          else
+            gh pr create --base main --head "$BRANCH"               --title "chore(board): sync the board into the queue"               --body-file "$RUNNER_TEMP/pr-body.md"
+          fi
+
+      - name: Close the sync PR when the board and the files agree
+        if: steps.sync.outputs.changed == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr close "$BRANCH" --delete-branch             --comment "Superseded: the board and the files now agree." 2>/dev/null || true

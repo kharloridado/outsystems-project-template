@@ -1,0 +1,131 @@
+# Approved → shipped.
+#
+# For every card in the `Approved` lane: squash-merge its PR into main, open the handover Task,
+# move the card to `Handover`.
+#
+# THIS WORKFLOW MERGES TO `main`. It is the only one that does. It is a SEPARATE FILE from
+# board-sync.yml on purpose: the read path and the write-to-main path should be reviewable
+# apart, and disabling this one must not take the mirror down with it. To stop it shipping,
+# disable this workflow in the Actions tab — the sync keeps running.
+#
+# THE SIGNATURE IS THE LANE, AND A HUMAN OWNS IT. Dragging a card into `Approved` is the
+# approval; this workflow executes it. CLAUDE.md hard rule 10 was amended to say so explicitly.
+# What has not changed, and must not: no agent may move a card INTO `Approved` or `Done`. The
+# property being protected is that no single actor both approves and merges.
+#
+# WHY IT CANNOT BE A CLAUDE ROUTINE. Moving a card to `Handover` is a Projects v2 GraphQL
+# mutation, and a Claude Code cloud routine cannot call Projects v2 at all (no gh, no project_*
+# MCP tool, no GraphQL passthrough, egress proxy refuses api.github.com/graphql). Actions runs
+# on GitHub's own infrastructure, where it is an ordinary request.
+#
+# WHAT IT REFUSES TO SHIP — each of these is a silent-corruption story, not a nicety:
+#   - an item not `built`/`approved` in state.json  (nothing was ever validated)
+#   - a PR that is draft, closed, or has changes requested
+#   - a PR whose checks are not green, still running, or absent entirely
+#   - a PR that conflicts with main
+#   - an item with no row in loop/goal.md's signed inventory
+#   - an item whose handover body file does not exist
+# A refusal leaves the card exactly where it is and says why in the run summary.
+#
+# SETUP (once):
+#   BOARD_SYNC_TOKEN must be a classic PAT with the `project` scope — NOT just `read:project`.
+#   Moving a card writes a field value. The same secret serves board-sync.yml, which only reads.
+name: board-ship
+
+on:
+  schedule:
+    # Hourly during working hours — 09:00-18:00 America/New_York, Mon-Fri, written as 13-23 UTC
+    # because Actions cron is always UTC with no DST support (09:00 ET is 13:00 UTC in summer,
+    # 14:00 in winter). Hourly rather than the sync's 15 minutes: merging to main does not need
+    # low latency, and a wider interval means fewer chances to race a human mid-review.
+    - cron: "41 13-23 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would ship, merge nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# Never let two ship runs merge at once, and never cancel one mid-merge.
+concurrency:
+  group: board-ship
+  cancel-in-progress: false
+
+jobs:
+  ship:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # The handover body files are read from the checkout, and state.json is committed
+          # back. Full history so the push is not a shallow-clone reject.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # If someone flips drivesLoop back to true, board-advance owns the whole lifecycle and
+      # this workflow would be a second writer. Stop rather than race.
+      - name: Guard — board.drivesLoop must be false
+        run: |
+          if [ "$(node -p "require('./project.config.json').board?.drivesLoop === true")" = "true" ]; then
+            echo "::error::board.drivesLoop is true — board-advance owns the lifecycle in that mode. Disable this workflow or set drivesLoop back to false."
+            exit 1
+          fi
+
+      - name: Guard — the PAT is present
+        env:
+          BOARD_SYNC_TOKEN: ${{ secrets.BOARD_SYNC_TOKEN }}
+        run: |
+          if [ -z "$BOARD_SYNC_TOKEN" ]; then
+            echo "::error::secret BOARD_SYNC_TOKEN is not set. It needs a classic PAT with the \`project\` scope (moving a card WRITES a field value). gh secret set BOARD_SYNC_TOKEN --repo ${{ github.repository }}"
+            exit 1
+          fi
+
+      - name: Ship approved cards
+        id: ship
+        env:
+          BOARD_SYNC_TOKEN: ${{ secrets.BOARD_SYNC_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            node build/ship-board.mjs --dry-run
+          else
+            node build/ship-board.mjs
+          fi
+
+      - name: Commit the shipped state
+        if: steps.ship.outputs.shipped != '0'
+        run: |
+          if git diff --quiet -- loop/state.json; then
+            echo "state unchanged — nothing to commit"
+            exit 0
+          fi
+          git add loop/state.json
+          git commit -m "chore(board): record shipped items
+
+          Squash-merged the PRs behind the Approved cards, opened their handover Tasks,
+          and moved the cards to Handover. The approval was the lane move; this is its
+          execution.
+
+          [skip ci]"
+          # main moved under us if a merge landed during this run. Rebase and retry once.
+          git pull --rebase --autostash origin main && git push || { git pull --rebase --autostash origin main && git push; }
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### board-ship" >> "$GITHUB_STEP_SUMMARY"
+          echo "shipped: ${{ steps.ship.outputs.shipped || '0' }} · refused: ${{ steps.ship.outputs.refused || '0' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo '${{ steps.ship.outputs.summary || '{}' }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

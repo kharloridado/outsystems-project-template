@@ -1,0 +1,140 @@
+# Verify — the mechanical half of the review gate, re-run on every push.
+#
+# WHY THIS EXISTS
+# ---------------
+# The checker judges a deliverable ONCE, at build time, against the frozen Figma ref, and its
+# verdict is written into the PR body as text. Nothing re-computed it. So a fixup commit was
+# never re-checked, and if `main` moved under an open PR — a token changed, say — the PR's
+# measurements silently stopped describing what would actually merge.
+#
+# This workflow makes the PR's check live instead of a snapshot. It runs no agent and needs no
+# API key: the judgment already happened and is frozen in each item's committed
+# `measurements.json`, so all that is left is "did this change?", which is arithmetic.
+#
+#   build time   "is this right?"    agent, once, against the Figma ref
+#   every push   "did this change?"  this workflow, always, against the committed baseline
+#
+# Only the second question goes stale, and only the second one is cheap enough to run constantly.
+#
+# WHAT IT CANNOT DO
+# -----------------
+# It does not re-judge fidelity against Figma — there is no Figma here, by design. A red result
+# means the render moved since a human approved it; it does not mean the design was wrong. And a
+# green result means "unchanged", not "correct". Correctness was established at build time.
+
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push supersedes the first; nobody reads the older run.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # vendor/outsystems-ui is layer 1 of the preview — the REAL framework CSS the
+          # measurements are taken against. Without it the preview 404s where the framework
+          # should be, the cascade silently falls back, and every measured value describes a
+          # page nobody will ever see. This is the single most-skipped setup step.
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # The template depends on `playwright-core` (~5MB, no browser) so a developer drives an
+      # already-installed Chrome. A CI runner has no branded Chrome, so fetch the Chromium that
+      # playwright-core knows how to launch. `playwright-core` ships this CLI — no extra package.
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      # Compile the real OutSystems UI base into the preview.
+      - run: npm run build:osui
+
+      # check:config (placeholders, leaked example prefix, ODC tenant drift)
+      #   → build-theme (assemble dist/theme.css)
+      #   → validate:theme (balanced syntax, every var(--token) resolves)
+      # Any one of them failing is a build failure, so the deterministic gate comes free.
+      - name: Deterministic gate
+        run: npm run build:theme
+
+      # The gate scripts live in build/gate/ IN THIS REPO, beside build-theme.mjs and
+      # validate-theme.mjs, so there is nothing to fetch and nothing to pin.
+      #
+      # They started life in the outsystems-loop plugin and the first CI run proved that wrong:
+      # the plugin repo is private, a consuming project may be public, and a workflow cannot clone
+      # a private repo without a PAT — putting a token for a private repo into a public repo's CI
+      # is the wrong trade. The deeper reason is that these are deterministic Node tooling, not
+      # behaviour: the plugin keeps the *instructions* for using them, which is the part that goes
+      # stale when copied.
+
+      # Every committed probes.json is a permanent visual regression test. The suite grows with
+      # each deliverable, so a token change that breaks component #3 is caught while building #9.
+      - name: Fidelity regression check
+        run: |
+          shopt -s nullglob
+          probes=(loop/refs/*/probes.json)
+
+          if [ ${#probes[@]} -eq 0 ]; then
+            # Silence here would read as "everything passed". Say plainly that nothing was
+            # guarded — an unguarded PR reporting green is the failure this whole file prevents.
+            {
+              echo "### Fidelity regression check"
+              echo
+              echo ":warning: **No \`loop/refs/*/probes.json\` found — no item is guarded by a visual"
+              echo "regression check.** The deterministic gate passed, and that is all this run proves."
+              echo
+              echo "Probes are written by the checker at build time and committed with the item."
+              echo "A deliverable built before that rule existed has none until it is rebuilt."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          failed=0
+          for p in "${probes[@]}"; do
+            id="$(basename "$(dirname "$p")")"
+            baseline="loop/refs/$id/measurements.json"
+
+            if [ ! -f "$baseline" ]; then
+              echo "::warning title=No baseline::$id has probes.json but no committed measurements.json — unguarded."
+              continue
+            fi
+
+            echo "── $id ──"
+            # exit 0 measured · 3 something unmeasurable · 4 no browser/page.
+            # 3 and 4 are harness faults, not verdicts — surface them as failures rather than
+            # letting an unmeasured item read as fine.
+            if ! node build/gate/measure-fidelity.mjs \
+                  --probes "$p" --out "$RUNNER_TEMP/$id.json"; then
+              echo "::error title=Gate did not run::$id — measure-fidelity exited non-zero; the item is UNVERIFIED, not passing."
+              failed=1
+              continue
+            fi
+
+            node build/gate/compare-measurements.mjs \
+              --baseline "$baseline" --actual "$RUNNER_TEMP/$id.json" --label "$id" || failed=1
+          done
+          exit $failed
+
+      - name: Upload measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: measurements
+          path: ${{ runner.temp }}/*.json
+          if-no-files-found: ignore
+          retention-days: 14

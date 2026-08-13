@@ -7,25 +7,24 @@
   "scripts": {
     "init": "node build/init-project.mjs",
     "check:config": "node build/check-config.mjs",
-
     "build:theme": "npm run check:config && node build/build-theme.mjs && node build/validate-theme.mjs",
     "build:theme:ship": "npm run check:config && node build/build-theme.mjs --ship && node build/validate-theme.mjs",
     "validate:theme": "node build/validate-theme.mjs",
     "build:theme:min": "lightningcss --bundle --minify --targets \">= 0.25%\" tokens/index.css -o dist/theme.min.css",
     "watch:theme": "node build/build-theme.mjs --watch",
-
     "gen:color-utilities": "node build/gen-color-utilities.mjs",
     "gen:type-utilities": "node build/gen-type-utilities.mjs",
     "gen:spacing-utilities": "node build/gen-spacing-utilities.mjs",
-
     "build:osui": "node build/build-osui.mjs",
     "preview": "node build/preview-server.mjs",
-
     "embed:handover": "node build/embed-handover-code.mjs",
-
     "board:advance": "./loop/board-run.sh advance",
     "board:ship": "./loop/board-run.sh ship",
-    "board:sync": "./loop/board-run.sh sync"
+    "board:sync": "./loop/board-run.sh sync",
+    "sync:board": "node build/sync-board.mjs",
+    "sync:board:dry": "node build/sync-board.mjs --dry-run",
+    "ship:board": "node build/ship-board.mjs",
+    "ship:board:dry": "node build/ship-board.mjs --dry-run"
   },
   "devDependencies": {
     "lightningcss-cli": "^1.30.1",
