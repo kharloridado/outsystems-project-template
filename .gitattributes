@@ -1,0 +1,5 @@
+# vendor/outsystems-frontend-skills is a verbatim copy of an upstream repo, held here only
+# until we have access to the real one. No line-ending conversion: the copy must stay
+# byte-identical to upstream so it can be diffed against the submodule that replaces it.
+# See vendor/outsystems-frontend-skills/VENDORED.md.
+vendor/outsystems-frontend-skills/** -text

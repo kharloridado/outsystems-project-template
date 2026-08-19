@@ -93,6 +93,49 @@ if (boardOn) {
   }
 }
 
+/* ---- 4b. the platform-knowledge pack must actually be on disk ------------------- */
+/* The outsystems-loop skills hold no OutSystems platform knowledge — no block catalog, no
+ * variable list, no widget conventions. They read all of it from here at runtime. When this
+ * is missing the loop does NOT stop: the audit classifies from memory, invents blocks that
+ * do not exist, routes work to L5 that the framework already ships, and the checker cannot
+ * score framework grain at all. Every one of those looks like a normal run.
+ *
+ * That is the difference from vendor/outsystems-ui, which fails loudly by 404-ing the
+ * preview. This one degrades quietly, so it gets a hard gate instead. */
+const PK_ROOT = join(root, "vendor", "outsystems-frontend-skills");
+const PK_SENTINEL = join(PK_ROOT, "ui-frameworks", "outsystems-ui", "blocks-index.md");
+const pk = cfg.platformKnowledge ?? {};
+
+if (!existsSync(PK_ROOT)) {
+  errors.push(
+    `vendor/outsystems-frontend-skills is missing. The loop skills read every OutSystems ` +
+    `platform fact from there. On Windows this is usually a MAX_PATH truncation: run ` +
+    `\`git config --global core.longpaths true\` then \`git checkout -- .\`.`
+  );
+} else if (!existsSync(PK_SENTINEL)) {
+  errors.push(
+    `vendor/outsystems-frontend-skills exists but blocks-index.md is missing — the checkout ` +
+    `is incomplete, not absent. On Windows: \`git config --global core.longpaths true\` ` +
+    `then \`git checkout -- .\`, and re-count the files.`
+  );
+}
+
+if (!["submodule", "vendored-copy"].includes(pk.mode)) {
+  errors.push(
+    `platformKnowledge.mode is ${JSON.stringify(pk.mode)} — must be "submodule" or ` +
+    `"vendored-copy". See ARCHITECTURE.md in the outsystems-loop plugin.`
+  );
+}
+if (pk.mode === "submodule" && !pk.repo) {
+  errors.push(`platformKnowledge.mode is "submodule" but repo is null — nothing to pin.`);
+}
+if (pk.mode === "submodule" && !pk.pin) {
+  errors.push(
+    `platformKnowledge.pin is null. Pin the pack to a tag or SHA — on "main" the block ` +
+    `catalog can move under a running project with no commit in this repo.`
+  );
+}
+
 /* ---- 5. no placeholder or example prefix may survive in real project files ------ */
 function walk(dir) {
   if (!existsSync(dir)) return;

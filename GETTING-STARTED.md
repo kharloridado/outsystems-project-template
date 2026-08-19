@@ -18,7 +18,17 @@ setup, triage and integration, and the done-criteria.
    to Figma; without the connector there are no frozen refs, and without a ref nothing gets
    built.
 5. **jq** — used by `loop/run.sh` to read loop state (`brew install jq` / `apt install jq`).
-6. **Install the `outsystems-loop` plugin.** This is what brings the 13 OutSystems skills and
+6. **Windows only — enable long paths before you clone anything.**
+
+   ```
+   git config --global core.longpaths true
+   ```
+
+   `vendor/outsystems-frontend-skills` contains paths past Windows' 260-character limit. Without
+   this, git checks the project out **silently incomplete** — it prints a warning, then reports
+   success. Measured on a real clone: 114 of 117 files. `npm run check:config` now catches it, but
+   only after you have already wondered why the audit is inventing block names.
+7. **Install the `outsystems-loop` plugin.** This is what brings the 16 OutSystems skills and
    the `maker` / `checker` agents. They are **not** in this repo:
 
    ```

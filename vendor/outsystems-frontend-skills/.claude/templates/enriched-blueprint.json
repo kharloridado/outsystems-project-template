@@ -1,0 +1,288 @@
+{
+  "name": "AppName",
+  "description": "One paragraph describing the app's purpose and domain.",
+  "primary_color": "#HEX",
+
+  "app_chrome": {
+    "_comment": "Shared layout chrome — defined ONCE, applied to all screens using the layout_block. The agent builds a Menu web block in Common UIFlow from this. Login/LayoutBlank screens set layout_override and skip app_chrome.",
+    "layout_block": "LayoutSideMenu | LayoutTopMenu",
+    "sidebar": {
+      "width": "280px",
+      "background": "#hex",
+      "logo": {
+        "text": "App logo text or image reference",
+        "style": "size, bg color, radius, font"
+      },
+      "app_title": "App name shown below logo",
+      "app_subtitle": "Tagline or system description",
+      "nav_groups": [
+        {
+          "label": "Group Name (e.g., Main, Collections, Operations)",
+          "items": [
+            { "label": "Nav Item Label", "icon": "outsystems icon name", "screen": "TargetScreenName" }
+          ]
+        }
+      ],
+      "active_style": "CSS description for active nav item (e.g., rgba bg, left border, text color)",
+      "inactive_style": "CSS description for inactive nav items"
+    },
+    "header": {
+      "height": "72px",
+      "background": "#hex",
+      "content": [
+        {
+          "element": "Element description (e.g., Search bar, Notification bell, User profile)",
+          "style": "Visual description (dimensions, colors, icons)",
+          "action": "What happens on interaction"
+        }
+      ]
+    }
+  },
+
+  "blocks": [
+    {
+      "_comment": "Reusable Web Blocks — defined once, built as custom blocks in Common UIFlow, referenced by name in screen sections. Identify repeating UI patterns across screens (info rows, badges, timeline items, card headers) and extract them here instead of describing inline each time.",
+      "name": "BlockName (e.g., InfoRow, StatusBadge, TimelineRow, CardHeader)",
+      "description": "What this block renders and where it's reused",
+      "inputs": [
+        { "name": "InputParamName", "type": "text | integer | boolean | EntityName Identifier", "description": "what this input controls" }
+      ],
+      "layout": "Layout description — direction, spacing, alignment, key dimensions",
+      "placeholders": ["ContentSlot — named placeholder if the block accepts child widgets"],
+      "extended_class": "Space-separated class names ONLY (OS UI utilities + classes declared in design_system.theme_extensions.classes[].name). No inline CSS rules — declare them in theme_extensions.",
+      "usage_example": "Short description of how screens reference this block (e.g., 'Each info row in AssetDetail uses InfoRow with Label and Value inputs')"
+    }
+  ],
+
+  "design_system": {
+    "_comment": "Complete visual design system. Tokens override the existing OML theme.",
+
+    "colors": {
+      "page_bg": { "var": "--page-bg", "value": "#hex", "usage": "primary page canvas" },
+      "surface": { "var": "--surface-bg", "value": "#hex", "usage": "cards, panels" },
+      "card": { "var": "--card-bg", "value": "#hex", "usage": "card and tile fill" },
+      "text_primary": { "var": "--text-primary", "value": "#hex", "usage": "headlines, labels" },
+      "text_secondary": { "var": "--text-secondary", "value": "#hex", "usage": "muted body, subtitles" },
+      "positive": { "var": "--positive", "value": "#hex", "usage": "success, positive values" },
+      "negative": { "var": "--negative", "value": "#hex", "usage": "error, negative values" },
+      "warning": { "var": "--warning", "value": "#hex", "usage": "pending, caution" },
+      "info": { "var": "--info", "value": "#hex", "usage": "informational" },
+      "border": { "var": "--border", "value": "#hex", "usage": "card borders, dividers" },
+      "gradients": [
+        { "var": "--gradient-name", "value": "linear-gradient(...)", "usage": "purpose" }
+      ]
+    },
+
+    "typography": [
+      { "role": "role-name", "font": "Inter", "size": "px", "weight": 700, "line_height": 1.2, "color": "--var", "usage": "where used" }
+    ],
+
+    "spacing": {
+      "base_unit": "8px",
+      "scale": [
+        { "name": "xs", "value": "4px", "usage": "tight gaps" },
+        { "name": "sm", "value": "8px", "usage": "small padding" },
+        { "name": "md", "value": "12px", "usage": "medium gaps" },
+        { "name": "lg", "value": "16px", "usage": "card padding" },
+        { "name": "xl", "value": "24px", "usage": "section gaps" },
+        { "name": "2xl", "value": "32px", "usage": "major section breaks" }
+      ]
+    },
+
+    "border_radius": [
+      { "name": "sm", "value": "4px", "usage": "tags, small chips" },
+      { "name": "default", "value": "8px", "usage": "buttons, icons" },
+      { "name": "lg", "value": "12px", "usage": "cards, panels" },
+      { "name": "pill", "value": "20px", "usage": "badges, filter chips" },
+      { "name": "full", "value": "50%", "usage": "avatars, dots" }
+    ],
+
+    "shadows": [
+      { "name": "shadow-name", "value": "CSS shadow value", "usage": "where used" }
+    ],
+
+    "visual_rules": [
+      "Rule descriptions for color hierarchy, hover states, active states, accessibility contrast"
+    ],
+
+    "theme_extensions": {
+      "_comment": "SINGLE SOURCE OF TRUTH for ALL custom CSS the app needs. Both the :root variable overrides AND every custom class go here, ONCE. The agent emits this entire block onto the THEME's StyleSheet — theme-wide by default. Per-section outsystems_hints.extended_class fields reference these classes by name only — they NEVER inline CSS rules.\n\nUTILITIES FIRST. Before declaring a custom class here, check if a combination of OS UI utility classes already covers the visual — see styles-and-utilities.md for the full catalog. Common properties expressible via utilities (do NOT re-declare in classes[]):\n- display: display-flex / display-grid / display-block / display-inline-flex / etc.\n- flex layout: align-items-center, justify-content-space-between, flex-direction-column, gap-base / row-gap-s / column-gap-l, flex1\n- spacing: padding-base / margin-top-l / padding-x-m / margin-y-base (full scale: none/xs/s/base/m/l/xl/xxl)\n- color: background-primary / text-success / background-neutral-1 (semantic + 12 color families x 7 shades + 11 neutrals)\n- typography: font-bold / font-semibold / heading2 / font-size-display / text-align-center\n- border: border-radius-soft (4px), border-radius-rounded (100px pill), border-radius-circle (50%), border-size-s/m/l\n- shadow: shadow-xs through shadow-xl (6 levels)\n- positioning: position-relative / position-absolute / absolute-top-right / sticky / fixed\n- sizing: full-width / full-height / half-width / auto-height\n\nA custom class in classes[] is JUSTIFIED only when (a) the property has NO utility equivalent (custom gradient, animation, clip-path, transform, non-standard background tint that doesn't map to neutral/semantic), OR (b) the value falls OUTSIDE the utility scale (e.g., border-radius: 16px doesn't match soft=4px / rounded=100px / circle=50%; width: 56px isn't a standard size). Even when justified, the class body should be THIN — push every property that COULD be a utility out to the widget's ExtendedClass alongside the custom class name. Example: for a 56x56 navy flag circle, ExtendedClass='display-flex align-items-center justify-content-center border-radius-circle flag-gbp' + a thin .flag-gbp { background: #002470; border: 2px solid var(--color-neutral-3); width: 56px; height: 56px; } — NOT a single .flag-gbp that re-declares display/align/justify/radius properties that utilities already provide.\n\nRule for class bodies: use var(--...) references to css_variables below; hardcoded hex/px in class rules is the smell that you forgot to declare the underlying token as a variable.\n\nRule for !important: avoid; only use when overriding a known OS UI block default that genuinely won't budge via block arguments + ExtendedClass alone. If you're writing !important on >2 properties in a class, you're fighting the wrong battle — pick the block-level arg or a different block.",
+      "css_variables": {
+        "_comment": "Two flavors mixed in one map: (1) overrides of EXISTING OS UI variables (--color-primary, --color-text-primary, --color-neutral-0 through -10, --color-background-body, --shadow-s/m/l, etc. — re-themes the framework everywhere) and (2) NEW app-specific variables (--card-bg-currency, --status-paused, --banner-spend-anywhere, --shadow-card, etc. — for tokens that don't map to an existing OS UI variable). Every color/shadow/size used in classes[] below should be a variable here — not a hardcoded value inline.",
+        "--color-primary": "#9FE870",
+        "--color-text-primary": "#1A1A1A",
+        "--color-text-secondary": "#6B7885",
+        "--color-neutral-0": "#FFFFFF",
+        "--color-neutral-7": "#6B7885",
+        "--color-neutral-10": "#1A1A1A",
+        "--card-bg-currency": "#EDF0ED",
+        "--shadow-card": "0px 2px 8px 0px rgba(0,0,0,0.06)"
+      },
+      "classes": [
+        {
+          "_comment": "Each class is defined ONCE here. Apply by referencing the name from any widget's outsystems_hints.extended_class field (space-separated alongside OS UI utility classes). Rule body uses var(--...) references — every color/shadow/size already declared in css_variables.",
+          "name": "card-currency",
+          "rule": "background: var(--card-bg-currency); border-radius: 16px; box-shadow: var(--shadow-card);"
+        },
+        {
+          "name": "flag-gbp",
+          "rule": "background: #002470; border: 2px solid var(--color-neutral-3); width: 56px; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center;"
+        }
+      ]
+    }
+  },
+
+  "entities": [
+    {
+      "_comment": "REFERENCE model — agent checks OML first, uses existing, adds missing, creates only what's new.",
+      "name": "EntityName",
+      "type": "master | transaction | static",
+      "attributes": [
+        { "name": "Id", "data_type": "longIntegerIdentifier", "is_primary_key": true, "is_foreign_key": false, "enum_values": null },
+        { "name": "Name", "data_type": "text", "is_primary_key": false, "is_foreign_key": false, "enum_values": null },
+        { "name": "StatusId", "data_type": "Status Identifier", "is_primary_key": false, "is_foreign_key": true, "enum_values": ["Active", "Inactive"] }
+      ]
+    }
+  ],
+
+  "screens": [
+    {
+      "_comment_authenticated": "Screen using the shared app_chrome layout. Title/subtitle are screen-level properties (go in Title placeholder). main_content contains ONLY MainContent body sections.",
+      "name": "ScreenName",
+      "type": "dashboard | list | detail | gallery | wizard | settings",
+      "description": "One sentence purpose.",
+      "entities": ["Entity1", "Entity2"],
+      "template": "Dashboard | ListWithFilters | Detail | FourColumnGallery | RequestCreation",
+      "title": "Page Title (goes in Title placeholder as AdvancedHtml h1)",
+      "subtitle": "Optional subtitle below the title",
+
+      "main_content": [
+        {
+          "_comment": "Standalone section — a single content block in MainContent.",
+          "id": "1",
+          "name": "Section Name",
+          "margin_bottom": "32px",
+          "description": "What this section shows",
+          "layout": {
+            "direction": "vertical | horizontal",
+            "padding": "px value",
+            "background": "#hex or --var",
+            "radius": "px value"
+          },
+          "data_source": {
+            "entity": "EntityName",
+            "joins": ["JoinedEntity"],
+            "filter": "Filter description in natural language",
+            "sort": "Sort description",
+            "max_records": 10
+          },
+          "content": [
+            {
+              "element": "UI element description — name the OutSystems block if one exists (ProgressBar, ProgressCircle, OutSystemsCharts.AreaChart, etc.)",
+              "data": "What data this shows — natural language, not OS-style bindings",
+              "label": "Static text (use instead of data for non-dynamic elements)",
+              "typography": "font spec from design_system",
+              "action": "What happens on click/change — full behavior description"
+            }
+          ],
+          "conditional_rendering": "Narrative description of data-driven styling or visibility changes",
+          "outsystems_hints": {
+            "block": "OutSystems UI block name with key arguments — must be CONSISTENT with what content[] describes",
+            "extended_class": "Space-separated class names ONLY — NO inline CSS rules. Each token is either an OS UI utility (display-flex, justify-content-space-between, margin-top-l, full-height, etc.) OR a class defined in design_system.theme_extensions.classes[].name. Example: 'card-currency full-height'. If a class isn't in theme_extensions.classes[], declare it there first — never declare CSS rules here."
+          }
+        },
+        {
+          "_comment": "Group section — multiple sections side-by-side in a Columns block. The group owns the Columns config and margin_bottom.",
+          "id": "2",
+          "type": "group",
+          "name": "Group Name (e.g., KPI Grid, Content Grid)",
+          "columns": "Columns2 | Columns3 | ColumnsMediumLeft | ColumnsMediumRight",
+          "columns_config": {
+            "GutterSize": "Entities.GutterSize.Large",
+            "PhoneBehavior": "Entities.BreakColumns.All"
+          },
+          "margin_bottom": "32px",
+          "items": [
+            {
+              "id": "2a",
+              "column": 1,
+              "name": "Item in column 1",
+              "description": "What this item shows",
+              "data_source": { "entity": "EntityName", "filter": "..." },
+              "content": [
+                { "element": "...", "data": "...", "typography": "..." }
+              ],
+              "outsystems_hints": { "block": "Card with UsePadding True" }
+            },
+            {
+              "id": "2b",
+              "column": 2,
+              "name": "Item in column 2",
+              "content": [ "..." ]
+            }
+          ]
+        }
+      ],
+
+      "popups": [
+        {
+          "_comment": "Overlay elements toggled by a Boolean LocalVariable. Not part of main_content flow.",
+          "name": "PopupName",
+          "trigger": "Which button/link opens this popup",
+          "style": "popup-dialog",
+          "content": [
+            { "element": "Popup body content", "data": "..." },
+            { "element": "Close button", "label": "Close", "action": "Set ShowPopupVar = False" }
+          ]
+        }
+      ],
+
+      "permissions": {
+        "authentication": "IsAnonymous=false",
+        "roles": { "Admin": "Full", "Viewer": "View" }
+      }
+    },
+    {
+      "_comment_unauthenticated": "Screen with layout_override that skips app_chrome (e.g., Login).",
+      "name": "LoginScreen",
+      "type": "landing",
+      "description": "Login screen.",
+      "entities": [],
+      "template": "Empty",
+      "layout_override": "LayoutBlank",
+      "title": null,
+      "subtitle": null,
+
+      "main_content": [
+        { "id": "1", "name": "Brand Panel", "margin_bottom": "0", "content": ["..."] },
+        { "id": "2", "name": "Login Form", "margin_bottom": "0", "content": ["..."] }
+      ],
+
+      "permissions": {
+        "authentication": "IsAnonymous=true"
+      }
+    }
+  ],
+
+  "icon_mapping": [
+    { "role": "visual role (e.g., navigation-home, action-send)", "outsystems_icon": "OutSystems icon name" }
+  ],
+
+  "roles": [
+    { "name": "Admin", "description": "Full CRUD access." },
+    { "name": "Viewer", "description": "Read-only access." }
+  ],
+
+  "acceptance_checklist": [
+    "Entity X created with N attributes",
+    "Screen Y exists with correct layout and data bindings",
+    "ProgressCircle/ProgressBar/Chart implemented using OS blocks, not raw containers",
+    "Menu block has sidebar navigation with ALL nav items from app_chrome.sidebar.nav_groups",
+    "Theme StyleSheet contains a :root with EVERY entry from design_system.theme_extensions.css_variables (each as `--name: value;`) AND a `.<name> { <rule> }` selector for EVERY entry in design_system.theme_extensions.classes[]. The agent emits theme_extensions ONCE onto the theme — no per-screen or per-block duplication.",
+    "Every widget's ExtendedClass value across the entire app traces to either (a) a known OS UI utility class OR (b) an entry in design_system.theme_extensions.classes[].name. Undefined class refs are silent no-ops; the polish-checklist custom-class scan catches them. No widget declares CSS rules inline.",
+    "Class rule bodies in theme_extensions.classes[] use var(--...) references for every color/shadow/size — no hardcoded hex/px duplicated across rules. Tokens that don't already exist as OS UI variables (e.g., --card-bg-currency, --shadow-card) are declared in theme_extensions.css_variables in the same single :root block.",
+    "All main_content sections have margin_bottom spacing applied",
+    "Authentication set (no RegisteredRole)",
+    "VERIFICATION GATE: After implementation, use get_screen_names to list screens, get_web_block_names for Menu block, get_screen for each screen, and get_theme_css for themes. Compare against every item above. For the theme-extensions gate specifically: dump the theme's emitted StyleSheet, parse the :root block, and confirm every css_variables key + every classes[].name appears exactly once. Any item not satisfied must be fixed before finishing."
+  ]
+}
