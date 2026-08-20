@@ -170,6 +170,38 @@ function scan(path) {
 
 SCAN_DIRS.forEach((d) => walk(join(root, d)));
 
+/* ---- ODC tenant: project.config.json and .mcp.json must agree ------------------- */
+/* This is the one project value that is deliberately duplicated, because the harness
+ * reads .mcp.json before any build script runs. Duplication is only safe when something
+ * checks it, so the drift check lives here — inside the checker's deterministic gate. */
+const MCP_PATH = join(root, ".mcp.json");
+const tenant = cfg.odcTenant;
+const tenantSet = typeof tenant === "string" && tenant.trim() !== "" && !tenant.includes("<<");
+if (!tenantSet) {
+  errors.push(
+    'odcTenant is unset. Re-run `npm run init --odc-tenant=<tenant>.outsystems.dev`. ' +
+      "Do NOT guess it: a wrong tenant points every ODC call at somebody else's environment."
+  );
+} else if (!existsSync(MCP_PATH)) {
+  errors.push(`odcTenant is "${tenant}" but .mcp.json does not exist. Re-run \`npm run init\` to generate it.`);
+} else {
+  let mcpUrl = null;
+  try {
+    mcpUrl = JSON.parse(readFileSync(MCP_PATH, "utf8"))?.mcpServers?.outsystems?.url ?? null;
+  } catch (e) {
+    errors.push(`.mcp.json is not valid JSON: ${e.message}`);
+  }
+  const expected = `https://${tenant}/mcp`;
+  if (mcpUrl && mcpUrl !== expected) {
+    errors.push(
+      `.mcp.json points at ${mcpUrl} but project.config.json says ${expected}. ` +
+        "Re-run `npm run init` rather than hand-editing .mcp.json."
+    );
+  } else if (!mcpUrl) {
+    errors.push(".mcp.json has no mcpServers.outsystems.url. Re-run `npm run init` to generate it.");
+  }
+}
+
 /* ---- report --------------------------------------------------------------------- */
 if (errors.length) {
   console.error(`\ncheck:config FAILED — ${errors.length} problem(s):\n`);

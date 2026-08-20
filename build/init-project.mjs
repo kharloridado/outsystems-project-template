@@ -82,6 +82,30 @@ const repo = await ask("GitHub repo (owner/repo)", has(cfg.repo) ? cfg.repo : ""
 const figmaUrl = await ask("Figma library URL (blank if not yet known)", has(cfg.figma?.url) ? cfg.figma.url : "", "figma-url");
 const figmaKey = figmaUrl.match(/(?:file|design)\/([A-Za-z0-9]+)/)?.[1] ?? "";
 
+/* The ODC tenant is the ONE project value that must exist in TWO files: the harness reads
+ * .mcp.json before any build script runs, so it cannot resolve the value through
+ * project-config.mjs. The copy is therefore GENERATED here and CHECKED by check:config —
+ * documentation saying "keep these two in sync by hand" is a promise nobody keeps.
+ *
+ * NEVER guess it. A wrong tenant points every ODC call at somebody else's environment and
+ * could publish into it. Blank is the correct answer when unknown: the value stays
+ * <<ODC_TENANT>> and check:config keeps failing until a human fills it in. */
+const odcTenantRaw = await ask(
+  "ODC tenant hostname (e.g. acme.outsystems.dev — blank if not yet known)",
+  has(cfg.odcTenant) ? cfg.odcTenant : "",
+  "odc-tenant"
+);
+const odcTenant = String(odcTenantRaw ?? "")
+  .trim()
+  .replace(/^https?:\/\//i, "")
+  .replace(/^www\./i, "")
+  .replace(/[/?#].*$/, "");
+if (odcTenant && !/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(odcTenant)) {
+  throw new Error(
+    `"${odcTenantRaw}" is not a plausible hostname. Expected something like acme.outsystems.dev.`
+  );
+}
+
 /* Board-driven mode is opt-in: leave the URL blank and the loop runs from the signed
  * inventory in loop/goal.md instead. Both owner and number come from the same URL, so
  * ask for the URL once rather than making you retype the owner. */
@@ -119,6 +143,7 @@ Object.assign(cfg, {
   classPrefix: prefix,
   jsNamespace: jsNs,
   odcThemeModule: themeModule,
+  odcTenant: odcTenant || "<<ODC_TENANT>>",
   repo,
   figma: { fileKey: figmaKey || "<<FIGMA_FILE_KEY>>", url: figmaUrl || "<<FIGMA_URL>>" },
   board: {
@@ -132,6 +157,19 @@ Object.assign(cfg, {
 cfg.findings.ticketTarget = repo;
 writeFileSync(CONFIG, JSON.stringify(cfg, null, 2) + "\n");
 
+/* Generate .mcp.json from the tenant rather than asking anyone to hand-edit it. The ODC
+ * MCP is a remote HTTP endpoint served by the tenant itself; nothing installs locally and
+ * no token is stored, because auth is OAuth with Dynamic Client Registration. */
+const MCP = join(root, ".mcp.json");
+if (odcTenant) {
+  const mcp = existsSync(MCP) ? JSON.parse(readFileSync(MCP, "utf8")) : {};
+  mcp.mcpServers = { ...(mcp.mcpServers ?? {}), outsystems: { type: "http", url: `https://${odcTenant}/mcp` } };
+  writeFileSync(MCP, JSON.stringify(mcp, null, 2) + "\n");
+  console.log(`  wrote .mcp.json → https://${odcTenant}/mcp`);
+} else {
+  console.log("  .mcp.json NOT written — no ODC tenant given; check:config will fail until it is.");
+}
+
 /* Substitute the same values across the scaffold docs. */
 const SUBS = {
   "<<CUSTOMER>>": customer,
@@ -143,6 +181,9 @@ const SUBS = {
   "<<OWNER/REPO>>": repo,
   "<<FIGMA_URL>>": figmaUrl,
   "<<FIGMA_FILE_KEY>>": figmaKey,
+  /* Only substituted when known — replacing it with "" would erase the placeholder and
+   * hide the fact that nobody has supplied a tenant yet. */
+  ...(odcTenant ? { "<<ODC_TENANT>>": odcTenant } : {}),
 };
 
 let touched = 0;

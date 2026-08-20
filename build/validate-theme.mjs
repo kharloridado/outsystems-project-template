@@ -64,7 +64,20 @@ if (structural) errors.push(`dist/theme.css is structurally broken: ${structural
  * which cmd.exe reads as a REDIRECTION operator — that mangled the command and failed a
  * perfectly healthy theme. Targets are a codegen concern; parsing is all we need here. */
 const isWin = process.platform === "win32";
-const bin = join(root, "node_modules", ".bin", isWin ? "lightningcss.cmd" : "lightningcss");
+
+/* Prefer the REAL binary over the .bin shim on Windows. `cmd.exe /c` re-splits the
+ * command line it is handed, so a shim path containing a space — as in
+ * "…\US Web Design System\node_modules\.bin\lightningcss.cmd" — is torn in half and
+ * cmd tries to execute "…\OutSystems\US", failing a perfectly healthy theme. That is
+ * the same class of bug as the `--targets` redirection one above: cmd.exe parsing a
+ * string we thought we had handed over as arguments.
+ *
+ * execFileSync on the .exe quotes correctly and never involves a shell at all. The shim
+ * stays as a fallback, invoked with the whole command line as ONE verbatim argument,
+ * double-quote-wrapped, which is the only spelling `cmd /s /c` parses correctly. */
+const winExe = join(root, "node_modules", "lightningcss-cli", "lightningcss.exe");
+const shim = join(root, "node_modules", ".bin", isWin ? "lightningcss.cmd" : "lightningcss");
+const bin = isWin && existsSync(winExe) ? winExe : shim;
 
 if (!existsSync(bin)) {
   console.warn(
@@ -75,11 +88,16 @@ if (!existsSync(bin)) {
   const probe = join(root, "dist", ".validate-probe.css");
   // `cmd.exe /c` rather than { shell: true }: same effect, without Node's DEP0190 warning
   // firing on every single build.
-  const [cmd, args] = isWin
-    ? ["cmd.exe", ["/c", bin, themeFile, "-o", probe]]
+  const viaShim = isWin && bin === shim;
+  const [cmd, args] = viaShim
+    ? ["cmd.exe", ["/d", "/s", "/c", `""${bin}" "${themeFile}" -o "${probe}""`]]
     : [bin, [themeFile, "-o", probe]];
   try {
-    execFileSync(cmd, args, { stdio: ["ignore", "ignore", "pipe"], cwd: root });
+    execFileSync(cmd, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      cwd: root,
+      ...(viaShim ? { windowsVerbatimArguments: true } : {}),
+    });
   } catch (err) {
     const detail = (err.stderr?.toString() || err.message).trim();
     errors.push(`dist/theme.css does not parse as valid CSS:\n\n${detail}`);
