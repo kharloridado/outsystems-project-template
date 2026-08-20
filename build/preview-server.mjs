@@ -59,6 +59,10 @@ server.listen(PORT, '127.0.0.1', () => {
   const url = `http://127.0.0.1:${PORT}${ENTRY}`;
   console.log(`\n  Preview → ${url}\n  Press Ctrl+C to stop.\n`);
   // Best-effort auto-open (Windows/macOS/Linux); harmless if it fails.
+  // PREVIEW_NO_OPEN=1 suppresses it: the fidelity gate spawns this server headlessly
+  // on every run, and popping a real browser window there is noise at a keyboard and
+  // a hang in CI.
+  if (process.env.PREVIEW_NO_OPEN) return;
   const cmd = process.platform === 'win32' ? 'start ""'
             : process.platform === 'darwin' ? 'open' : 'xdg-open';
   import('node:child_process')

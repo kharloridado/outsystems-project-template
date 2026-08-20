@@ -45,6 +45,7 @@ git submodule update --init          # then pin vendor/outsystems-ui to your ODC
 ./.github/setup-project.sh <owner> <owner>/<repo> "<board name>"
 npm run build:theme   # → dist/theme.css, paste into the ODC Theme editor
 npm run preview       # local Live Style Guide harness in a real browser
+npm run gate:selftest # prove the rendered-fidelity gate can actually run
 ```
 
 Then fill `design/brand-guidelines.md` + `design/figma-links.md`, set the goal and the
@@ -83,6 +84,7 @@ credible-looking default is worse than a blank.
 │   ├── build-theme.mjs          # tokens/*.css → dist/theme.css (TOC, single :root)
 │   ├── gen-*-utilities.mjs      # generated color/type/spacing utility classes
 │   ├── embed-handover-code.mjs  # embeds the real CSS/JS into handover/*.md
+│   ├── gate/                    # the rendered-fidelity gate: measure + baseline diff
 │   └── optional/fontawesome/    # OPT-IN add-on: self-hosted licensed icon font
 ├── tokens/                   # the theme source, layered; index.css is the load-bearing manifest
 ├── src/

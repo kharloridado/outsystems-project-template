@@ -1,0 +1,20 @@
+{
+  "$comment": "Probes for the gate's own self-test page. Exercises every probe kind: props, rect, ink, ink-on-pseudo, and the js escape hatch. Run via `npm run gate:selftest`.",
+  "url": "/build/gate/selftest.html",
+  "waitFor": ".gate-selftest__swatch",
+  "viewports": [
+    { "name": "desktop", "width": 1280, "height": 900 },
+    { "name": "mobile", "width": 375, "height": 812 }
+  ],
+  "probes": [
+    {
+      "name": "swatch / fill",
+      "selector": ".gate-selftest__swatch",
+      "props": ["background-color", "color", "font-size", "font-weight", "border-radius"]
+    },
+    { "name": "swatch / box", "selector": ".gate-selftest__swatch", "rect": true },
+    { "name": "glyph / ink", "selector": ".gate-selftest__glyph", "ink": true },
+    { "name": "pseudo glyph / ink", "selector": ".gate-selftest__pseudo", "pseudo": "::before", "ink": true },
+    { "name": "document title", "js": "document.title" }
+  ]
+}

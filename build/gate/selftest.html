@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>fidelity gate self-test</title>
+<!-- A deliberately self-contained page: no theme, no vendor CSS, no webfont.
+     It proves the HARNESS works (browser launches, server serves, probes read
+     computed style) without depending on any project build output. If this
+     passes and a real probe run does not, the fault is in the project, not the gate. -->
+<style>
+  :root { --gate-selftest-bg: #1b4d3e; --gate-selftest-fg: #ffffff; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; }
+  .gate-selftest__swatch {
+    background-color: var(--gate-selftest-bg);
+    color: var(--gate-selftest-fg);
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 8px;
+    width: 240px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .gate-selftest__glyph { font-family: Arial, Helvetica, sans-serif; font-size: 32px; }
+  .gate-selftest__pseudo::before { content: "\2713"; font-size: 24px; }
+</style>
+</head>
+<body>
+  <div class="gate-selftest__swatch">swatch</div>
+  <span class="gate-selftest__glyph">A</span>
+  <span class="gate-selftest__pseudo"></span>
+</body>
+</html>
