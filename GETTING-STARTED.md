@@ -12,7 +12,11 @@ setup, triage and integration, and the done-criteria.
    for the current install method).
 2. **GitHub CLI** — install `gh`, then `gh auth login`. Needed for findings (bugs), handovers
    (tasks) and the Project board on a private repo.
-3. **Node.js** — required for the theme build pipeline.
+3. **Node.js** — required for the theme build pipeline. A local **Chrome or Edge** is also
+   required by the rendered-fidelity gate: `playwright-core` drives the browser you already
+   have, so there is no 140 MB download. Verify both with `npm run gate:selftest` after
+   `npm install` — exit 0 means the gate can actually run, and a gate that cannot run
+   reports `unverified`, which caps every item at FAIL.
 4. **Figma MCP** — connect the Figma connector in Claude Code so the loop can read the design
    library. Subagents have no Figma access, so the orchestrator is the only thing that talks
    to Figma; without the connector there are no frozen refs, and without a ref nothing gets
