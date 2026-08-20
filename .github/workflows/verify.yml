@@ -32,6 +32,13 @@ jobs:
 
       - run: npm ci
 
+      # Proves the harness itself works — browser launches, server serves, probes
+      # read computed style — independently of any project state. It runs FIRST and
+      # depends on nothing the project configures, so a red X here always means the
+      # harness, never the config.
+      - name: gate self-test
+        run: npm run gate:selftest
+
       # The drift guard: no surviving <<PLACEHOLDER>>, no leaked example prefix,
       # conventions well-formed, .mcp.json's tenant agreeing with project.config.json.
       - name: check:config
@@ -46,12 +53,6 @@ jobs:
       # Builds preview/vendor/outsystems-ui/outsystems-ui.css from the submodule.
       - name: build:osui
         run: npm run build:osui
-
-      # Proves the harness itself works — browser launches, server serves, probes
-      # read computed style — independently of any project state. When this passes
-      # and the regression step fails, the fault is in the project, not the gate.
-      - name: gate self-test
-        run: npm run gate:selftest
 
       # Re-measures every committed probes.json and diffs against its committed
       # baseline. Computed strings diff exactly; geometry is compared with a
