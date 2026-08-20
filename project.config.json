@@ -7,6 +7,7 @@
   "classPrefix": "<<CLASS_PREFIX>>",
   "jsNamespace": "<<JS_NAMESPACE>>",
   "odcThemeModule": "<<ODC_THEME_MODULE>>",
+  "odcTenant": "<<ODC_TENANT>>",
   "repo": "<<OWNER/REPO>>",
   "environment": "ODC",
 
