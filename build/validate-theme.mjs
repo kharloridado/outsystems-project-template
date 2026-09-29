@@ -20,39 +20,18 @@ import { readFileSync, existsSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { root } from "./lib/project-config.mjs";
+import { checkStructure } from "./lib/css-structure.mjs";
 
 const themeFile = join(root, "dist", "theme.css");
 const css = readFileSync(themeFile, "utf8");
 const errors = [];
 
 /* ---- 1a. structure: balanced braces + terminated comments ------------------------ */
-/* Done by hand, and FIRST, because a CSS parser will not catch this for us. lightningcss
- * treats a custom property's value as an opaque token stream, so `--x: ` left dangling by
- * an unbalanced brace parses "fine" — the corruption only shows up as silently missing
- * rules at runtime. Since build-theme.mjs is a text assembler that concatenates files, an
- * unterminated comment or a stray brace in ONE token file is the single most likely way to
- * corrupt the whole theme. That is precisely the failure the deterministic gate exists to
- * catch, so we check it explicitly rather than hoping the parser complains. */
-function checkStructure(s) {
-  let depth = 0;
-  let line = 1;
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === "\n") { line++; continue; }
-    if (s[i] === "/" && s[i + 1] === "*") {
-      const end = s.indexOf("*/", i + 2);
-      if (end === -1) return `unterminated comment opened at dist/theme.css:${line}`;
-      line += s.slice(i, end).split("\n").length - 1;
-      i = end + 1;
-      continue;
-    }
-    if (s[i] === "{") depth++;
-    else if (s[i] === "}" && --depth < 0) return `unexpected "}" at dist/theme.css:${line}`;
-  }
-  if (depth > 0) return `${depth} unclosed "{" — a block is never closed (check the token files for a stray brace)`;
-  return null;
-}
-
-const structural = checkStructure(css);
+/* The scanner moved to build/lib/css-structure.mjs when it turned out to be needed on
+ * every hand-edited stylesheet, not just the assembled theme — check-stylesheets.mjs is
+ * the other caller. The reasoning for checking this by hand rather than with a parser,
+ * and the three times it has cost this project, are documented there. */
+const structural = checkStructure(css, "dist/theme.css");
 if (structural) errors.push(`dist/theme.css is structurally broken: ${structural}`);
 
 /* ---- 1b. syntax: parse it for real ----------------------------------------------- */
@@ -111,6 +90,57 @@ if (!existsSync(bin)) {
 const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 const defined = new Set([...code.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+
+/* …PLUS every token OutSystems UI itself declares.
+ *
+ * WHY THIS IS NOT A LOOSENING. The original check only knew what dist/theme.css declares,
+ * which was right while the theme was nothing but token files: a token layer that
+ * references a name it never defines is broken. It stops being right the moment
+ * src/blocks/*.css joins the build. In ODC the theme is pasted BELOW OutSystems UI, so
+ * the framework's ~600 custom properties are genuinely in scope, and the whole point of a
+ * block override is to consume them — `var(--space-s)`, `var(--font-regular)`,
+ * `var(--border-size-l)`. Under the theme-only model the only ways to pass were to hard-
+ * code a literal fallback (hard rule 3: never hard-code a design value) or to restate the
+ * framework's own value in a token file (which tokens/index.css forbids: a --wf- token is
+ * for something OutSystems UI does not have). Both are worse than the problem.
+ *
+ * Reading the real compiled base instead makes the check STRICTER for block CSS, not
+ * looser: a typo'd framework token name — `--space-md`, `--font-weight-regular` — is now
+ * caught, where before it simply was not examined. The source is the same file every specimen
+ * page loads, so the validator and the gate agree on what exists.
+ *
+ * If the base has not been compiled yet (`npm run build:osui`), fall back to theme-only
+ * and say so out loud rather than silently passing everything.
+ *
+ * HARVEST SCOPE — `:root` / `html` / `body` ONLY, never "anywhere in the file".
+ * OutSystems UI declares ~69 custom properties inside SCOPED rules that a theme-level
+ * var() can never see: --osui-tooltip-background-color on .osui-tooltip,
+ * --osui-carousel-track-width on the carousel track, --border-radius-sharp inside a
+ * modifier block, and so on. Harvesting the whole file would let a theme rule write
+ * `var(--osui-carousel-track-width)` — a reference that resolves to NOTHING at :root —
+ * and the validator would call it fine. That is the exact silent-failure class this
+ * check exists to catch, so the harvest is restricted to the selectors whose declarations
+ * are genuinely inherited by every element the theme styles. A block override that needs
+ * a scoped property must still spell out a fallback: var(--x, <value>). */
+const osuiBase = join(root, "review", "vendor", "outsystems-ui", "outsystems-ui.css");
+if (existsSync(osuiBase)) {
+  const base = readFileSync(osuiBase, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  /* Selector list must consist ONLY of :root / html / body (with optional pseudo-classes
+   * such as :root:not(.x) or html[dir=rtl]); one scoped selector in the list and the
+   * whole block is skipped, because the declarations then only apply under that scope. */
+  const GLOBAL_SELECTOR = /^(?::root|html|body)(?:\[[^\]]*\]|:[\w-]+(?:\([^)]*\))?)*$/;
+  for (const m of base.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selectors = m[1].split(",").map((s) => s.trim()).filter(Boolean);
+    if (!selectors.length || !selectors.every((s) => GLOBAL_SELECTOR.test(s))) continue;
+    for (const d of m[2].matchAll(/(--[\w-]+)\s*:/g)) defined.add(d[1]);
+  }
+} else {
+  console.warn(
+    "validate:theme — review/vendor/outsystems-ui/outsystems-ui.css is missing, so framework\n" +
+      "                 tokens cannot be resolved (run `npm run build:osui`). Any var() a block\n" +
+      "                 override takes from OutSystems UI will be reported as dangling."
+  );
+}
 
 /* A usage only counts as dangling when it has NO fallback — `var(--x, 8px)` is a
  * documented fallback chain and is legitimate (Web Components rely on it). */

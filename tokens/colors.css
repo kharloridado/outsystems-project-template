@@ -1,21 +1,6 @@
-/* @section Colors / Primitives */
-/* colors.css — brand color tokens (source for build:theme)
- * Fill these from design/brand-guidelines.md. These ARE the brand palette.
- * Accessibility note: build to these values exactly. If a pairing fails
- * WCAG 2.2 AA contrast, that is a FINDING (findings/), not a reason to edit here. */
+/* @section Colors */
+/* colors.css — the OutSystems UI colour variables this brand replaces, declared on the
+ * framework's own names (`--color-primary: #…`). Redefine only what differs; a value identical
+ * to the framework's is left to the framework. Spec: specs/tokens/<tok-id>/. */
 :root {
-  /* Neutrals */
-  --color-neutral-0: #FFFFFF;
-  --color-neutral-1: #F8FAFC;
-  --color-neutral-9: #1E293B;
-
-  /* Brand */
-  --color-primary:   #000000;  /* TODO: brand primary */
-  --color-secondary: #000000;  /* TODO: brand secondary */
-
-  /* Semantic */
-  --color-success: #16A34A;
-  --color-warning: #D97706;
-  --color-error:   #DC2626;
-  --color-info:    #2563EB;
 }

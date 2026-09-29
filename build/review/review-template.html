@@ -1,0 +1,427 @@
+<title>__TITLE__</title>
+<meta name="description" content="Build review: Figma next to the live build, the fidelity gate's measurements against the judged baseline, findings and the code to paste into ODC.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --ground: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --ink: #152030;
+  --muted: #5a6577;
+  --line: #d9dee6;
+  --accent: #1d4f91;
+  --accent-soft: #e3ecf8;
+  --good: #1c7a4d;
+  --good-soft: #e2f3ea;
+  --warn: #9a5b00;
+  --warn-soft: #fbefd9;
+  --bad: #b3261e;
+  --bad-soft: #fbe5e3;
+  --stage: #e4e8ee;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0f141b; --surface: #161d27; --surface-2: #1c2531; --ink: #e5e9ef; --muted: #98a2b3;
+    --line: #2a3441; --accent: #86aee8; --accent-soft: #1d2b40; --good: #62c596; --good-soft: #15291f;
+    --warn: #e2a64c; --warn-soft: #2e2413; --bad: #f08176; --bad-soft: #321a19; --stage: #0b1016;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0f141b; --surface: #161d27; --surface-2: #1c2531; --ink: #e5e9ef; --muted: #98a2b3;
+  --line: #2a3441; --accent: #86aee8; --accent-soft: #1d2b40; --good: #62c596; --good-soft: #15291f;
+  --warn: #e2a64c; --warn-soft: #2e2413; --bad: #f08176; --bad-soft: #321a19; --stage: #0b1016;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 14px/1.5 var(--sans); }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+h1, h2, h3 { font-family: var(--cond); font-weight: 600; text-wrap: balance; margin: 0; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.shell { display: grid; grid-template-columns: 1fr; min-height: 100vh; }
+.shell.has-rail { grid-template-columns: 260px minmax(0, 1fr); }
+.rail { background: var(--surface); border-right: 1px solid var(--line); padding-block: 20px; position: sticky; top: env(safe-area-inset-top, 0px); height: 100vh; overflow-y: auto; }
+.rail h2 { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-inline: 20px; margin-bottom: 8px; }
+.rail-group { margin-top: 14px; }
+.rail-item { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 7px 20px; cursor: pointer; }
+.rail-item:hover { background: var(--surface-2); }
+.rail-item[aria-current="true"] { background: var(--accent-soft); }
+.rail-item .id { font-family: var(--mono); font-size: 12.5px; }
+.rail-item .n { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.good { background: var(--good); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+
+.main { min-width: 0; padding-inline: 32px; padding-block: 28px 64px; display: grid; gap: 28px; align-content: start; }
+.head { display: grid; gap: 10px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.head h1 { font-size: 30px; line-height: 1.15; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-weight: 500; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+.chip.good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.chip b { font-variant-numeric: tabular-nums; }
+
+section.block { display: grid; gap: 12px; }
+.block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.block-head h2 { font-size: 19px; }
+.hint { color: var(--muted); font-size: 13px; max-width: 70ch; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.compare.solo { grid-template-columns: minmax(0, 1fr); }
+.pane { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.pane-bar .seg button { padding: 2px 10px; font-size: 12px; }
+.pane-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.pane-bar strong { color: var(--ink); font-weight: 600; }
+.stage { background: var(--stage); overflow: auto; height: 640px; }
+.stage img { display: block; max-width: 100%; margin-inline: auto; }
+.stage.actual img { max-width: none; }
+.frame-box { transform-origin: 0 0; }
+.frame-box iframe { border: 0; background: #fff; display: block; }
+.empty { padding: 24px; color: var(--muted); }
+
+.ledger-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: var(--surface-2); position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+td.val { font-family: var(--mono); font-size: 12px; max-width: 360px; overflow-wrap: anywhere; }
+td.val details summary { cursor: pointer; list-style: none; }
+td.val details summary::-webkit-details-marker { display: none; }
+td.state { white-space: nowrap; }
+.state-pill { display: inline-block; border-radius: 4px; padding: 1px 7px; font-size: 12px; font-weight: 500; }
+.s-match { background: var(--good-soft); color: var(--good); }
+.s-changed, .s-missing { background: var(--bad-soft); color: var(--bad); }
+.s-unmeasured { background: var(--warn-soft); color: var(--warn); }
+.s-moved, .s-new, .s-unjudged { background: var(--surface-2); color: var(--muted); }
+td.vp { color: var(--muted); white-space: nowrap; }
+
+.findings { display: grid; gap: 10px; }
+.finding { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; }
+.finding.sev-high, .finding.sev-blocker { border-left-color: var(--bad); }
+.finding.sev-medium { border-left-color: var(--warn); }
+.finding-top { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.finding-top .fid { font-family: var(--mono); font-weight: 500; }
+.finding p { margin: 0; max-width: 90ch; }
+.muted { color: var(--muted); }
+
+.code { display: grid; gap: 10px; }
+.code details { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.code summary { cursor: pointer; padding: 10px 14px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.code pre { margin: 0; padding: 14px; border-top: 1px solid var(--line); max-height: 520px; overflow: auto; font: 12px/1.55 var(--mono); background: var(--surface-2); }
+.copy { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
+
+.ref { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.ref summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+.ref-body { padding: 4px 20px 20px; border-top: 1px solid var(--line); max-width: 100%; overflow-x: auto; }
+.ref-body h1 { font-size: 22px; margin-top: 16px; } .ref-body h2 { font-size: 18px; margin-top: 20px; } .ref-body h3 { font-size: 15px; margin-top: 16px; }
+.ref-body p, .ref-body li { max-width: 80ch; }
+.ref-body table { font-size: 12.5px; margin-block: 8px; }
+.ref-body pre { background: var(--surface-2); padding: 12px; overflow-x: auto; border-radius: 6px; }
+
+.overview { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; text-align: left; cursor: pointer; }
+.card:hover { border-color: var(--accent); }
+.card .thumb { height: 110px; background: var(--stage) center/contain no-repeat; border-radius: 6px; }
+.card .id { font-family: var(--mono); font-size: 13px; }
+
+@media (max-width: 860px) {
+  .shell.has-rail { grid-template-columns: 1fr; }
+  .rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .main { padding-inline: 16px; }
+  .compare { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 520px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="shell" id="shell">
+  <nav class="rail" id="rail" hidden aria-label="Deliverables"></nav>
+  <main class="main" id="main"></main>
+</div>
+
+<script id="review-data" type="application/json">__DATA__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script>
+(function () {
+  var DATA = JSON.parse(document.getElementById('review-data').textContent);
+  window.REVIEW_OSUI = DATA.shared.styles[0].css;
+  var items = DATA.items;
+  var byId = {};
+  items.forEach(function (it) { byId[it.id] = it; });
+  var multi = items.length > 1;
+  var main = document.getElementById('main');
+  var rail = document.getElementById('rail');
+  var view = { item: null, vp: 0, figmaActual: false, filter: null, layout: 'both', mode: 'demo' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function el(html) { var t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
+
+  function gateTone(it) {
+    var g = it.gate;
+    if (!g) return 'warn';
+    if (g.regressions) return 'bad';
+    if (g.unmeasured) return 'warn';
+    return 'good';
+  }
+  function gateLabel(it) {
+    var g = it.gate;
+    if (!g) return 'No probes — fidelity not measured';
+    if (!g.baseline) return g.measured + ' / ' + g.probes + ' measured · no baseline yet';
+    if (g.regressions) return g.regressions + ' changed since the judged baseline';
+    return g.measured + ' / ' + g.probes + ' measured · matches baseline';
+  }
+
+  /* Demo mode shows the component and its states only. It hides the harness around them — notes,
+     finding banners, sections tagged data-review="evidence" (sibling and collateral checks) and
+     other items' specimens included for probes — and shortens section headings to the
+     component's name. The DOM and CSS are otherwise the measured page's. */
+  var DEMO_STYLE = '<style id="review-demo">' +
+    '.__PREFIX__specimen__head, .__PREFIX__specimen__note, .__PREFIX__specimen__finding, [data-review="included"], ' +
+    '[data-review="evidence"], [data-review-hidden] { display: none !important; }' +
+    '.__PREFIX__specimen__body { padding-block-start: 24px; }<\/style>';
+  function demoScript() {
+    var rank = function (el) { var m = /^H([1-6])$/.exec(el.tagName); return m ? +m[1] : 9; };
+    document.querySelectorAll('h3[data-review="evidence"], h4[data-review="evidence"]').forEach(function (h) {
+      var r = rank(h), n = h.nextElementSibling;
+      while (n && rank(n) > r) { n.setAttribute('data-review-hidden', ''); n = n.nextElementSibling; }
+    });
+    document.querySelectorAll('.__PREFIX__specimen__section > h2').forEach(function (h) {
+      h.textContent = h.textContent.split(/\s[—(]/)[0].trim();
+    });
+  }
+
+  /* The specimen page, rebuilt from the same parts the gate measured. */
+  var docCache = {};
+  function specimenDoc(it) {
+    var key = it.id + ':' + view.mode;
+    if (docCache[key]) return docCache[key];
+    var demo = view.mode === 'demo';
+    var sh = DATA.shared;
+    var head = sh.styles.map(function (s) { return '<style data-href="' + esc(s.href) + '">' + s.css + '</style>'; }).join('\n');
+    var body = it.body
+      .replace(/<script data-src="([^"]+)"><\/script>/g, function (_, p) {
+        return '<script data-src="' + p + '">' + (sh.scripts[p] || '').replace(/<\/script/gi, '<\\/script') + '<\/script>';
+      })
+      .replace(/(<iframe[^>]*data-framework-baseline[^>]*><\/iframe>)/g,
+        '$1<script>document.querySelector("[data-framework-baseline]").srcdoc = "<!DOCTYPE html><html><head><style>" + parent.REVIEW_OSUI + "<\/style><\/head><body><\/body><\/html>";<\/script>');
+    var doc = '<!DOCTYPE html><html lang="en" data-prefix="__PREFIX__"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+      head + (demo ? DEMO_STYLE : '') + '</head><body><header class="__PREFIX__specimen__head"><h1>' + esc(DATA.project.designSystemName) + '</h1><p>' + esc(it.id) +
+      '</p></header><main class="__PREFIX__specimen__body">' + body + '</main><script>' + sh.stateGate + '<\/script>' +
+      (demo ? '<script>(' + demoScript.toString() + ')();<\/script>' : '') + '</body></html>';
+    docCache[key] = doc;
+    return doc;
+  }
+
+  function renderRail() {
+    if (!multi) return;
+    document.getElementById('shell').classList.add('has-rail');
+    rail.hidden = false;
+    var groups = [['tokens', 'Tokens'], ['components', 'Components'], ['patterns', 'Patterns']];
+    var html = '<h2>' + esc(DATA.project.designSystemName) + '</h2>' +
+      '<button class="rail-item" data-go="" aria-current="' + (!view.item) + '"><span class="dot"></span><span>Overview</span><span class="n">' + items.length + '</span></button>';
+    groups.forEach(function (g) {
+      var list = items.filter(function (it) { return it.kind === g[0]; });
+      if (!list.length) return;
+      html += '<div class="rail-group"><h2>' + g[1] + '</h2>';
+      list.forEach(function (it) {
+        html += '<button class="rail-item" data-go="' + it.id + '" aria-current="' + (view.item === it.id) + '"><span class="dot ' + gateTone(it) + '"></span><span class="id">' + esc(it.id) + '</span><span class="n">' + (it.gate ? it.gate.probes : '—') + '</span></button>';
+      });
+      html += '</div>';
+    });
+    rail.innerHTML = html;
+  }
+
+  function renderOverview() {
+    var counts = { good: 0, warn: 0, bad: 0 };
+    items.forEach(function (it) { counts[gateTone(it)]++; });
+    main.innerHTML = '';
+    main.appendChild(el('<header class="head"><div class="eyebrow">' + esc(DATA.project.customer) + ' · v' + esc(DATA.project.version) + ' · ' + esc(DATA.project.commit) + '</div>' +
+      '<h1>' + esc(DATA.project.designSystemName) + '</h1>' +
+      '<div class="meta"><span>Built ' + esc(DATA.project.builtAt) + '</span><span>' + items.length + ' deliverables</span></div>' +
+      '<div class="chips"><span class="chip good"><b>' + counts.good + '</b> match their baseline</span><span class="chip bad"><b>' + counts.bad + '</b> changed</span><span class="chip warn"><b>' + counts.warn + '</b> not fully measured</span></div></header>'));
+    var grid = el('<div class="overview"></div>');
+    items.forEach(function (it) {
+      var c = el('<button class="card" data-go="' + it.id + '"><div class="thumb"></div><div class="id">' + esc(it.id) + '</div><div class="chips"><span class="chip ' + gateTone(it) + '">' + esc(gateLabel(it)) + '</span></div><div class="muted">' + esc(it.status || 'no status') + '</div></button>');
+      if (it.figma) c.querySelector('.thumb').style.backgroundImage = 'url(' + it.figma + ')';
+      grid.appendChild(c);
+    });
+    main.appendChild(el('<section class="block"><div class="block-head"><h2>Deliverables</h2><p class="hint">Pick one to see Figma next to the live build, what the gate measured and what to paste into ODC.</p></div></section>')).appendChild(grid);
+  }
+
+  function valueCell(v) {
+    if (v == null) return '<span class="muted">—</span>';
+    if (v.length <= 140) return esc(v);
+    return '<details><summary>' + esc(v.slice(0, 140)) + '… <span class="muted">more</span></summary>' + esc(v) + '</details>';
+  }
+
+  var STATE_LABEL = { match: 'Matches', changed: 'Changed', moved: 'Moved', 'new': 'New probe', unmeasured: 'Unmeasured', missing: 'Missing', unjudged: 'No baseline' };
+
+  function renderLedger(it, host) {
+    var g = it.gate;
+    if (!g) { host.innerHTML = '<p class="empty">This item has no probes.json yet, so nothing was measured. Its review rests on the side-by-side above.</p>'; return; }
+    var rows = g.rows;
+    var counts = {};
+    rows.forEach(function (r) { counts[r.state] = (counts[r.state] || 0) + 1; });
+    if (view.filter == null) view.filter = (counts.changed || counts.missing || counts.unmeasured) ? 'attention' : 'all';
+    var shown = rows.filter(function (r) {
+      if (view.filter === 'attention') return r.state === 'changed' || r.state === 'missing' || r.state === 'unmeasured';
+      if (view.filter === 'moved') return r.state === 'moved';
+      return true;
+    });
+    var bar = el('<div class="controls"><div class="seg" role="group" aria-label="Filter measurements">' +
+      '<button data-f="attention" aria-pressed="' + (view.filter === 'attention') + '">Needs attention · ' + ((counts.changed || 0) + (counts.missing || 0) + (counts.unmeasured || 0)) + '</button>' +
+      '<button data-f="moved" aria-pressed="' + (view.filter === 'moved') + '">Geometry moved · ' + (counts.moved || 0) + '</button>' +
+      '<button data-f="all" aria-pressed="' + (view.filter === 'all') + '">All · ' + rows.length + '</button></div></div>');
+    bar.addEventListener('click', function (e) { var b = e.target.closest('[data-f]'); if (!b) return; view.filter = b.getAttribute('data-f'); renderLedger(it, host); });
+    var body = shown.length ? shown.map(function (r) {
+      return '<tr><td class="vp">' + esc(r.viewport) + '</td><td>' + esc(r.name) + '</td><td class="val">' + valueCell(r.current) + '</td><td class="val">' + valueCell(r.baseline) + '</td><td class="state"><span class="state-pill s-' + r.state + '">' + STATE_LABEL[r.state] + '</span></td></tr>';
+    }).join('') : '<tr><td colspan="5" class="muted">Nothing in this view.</td></tr>';
+    host.innerHTML = '';
+    host.appendChild(bar);
+    var wrap = el('<div class="ledger-wrap"><table><thead><tr><th>Viewport</th><th>Probe</th><th>This build</th><th>Judged baseline</th><th>State</th></tr></thead><tbody>' + body + '</tbody></table></div>');
+    host.appendChild(wrap);
+  }
+
+  function mountFrame(it, stage, vp) {
+    stage.innerHTML = '';
+    var box = document.createElement('div');
+    box.className = 'frame-box';
+    var f = document.createElement('iframe');
+    f.title = it.id + ' specimen at ' + vp.width + ' px';
+    f.width = vp.width;
+    f.srcdoc = specimenDoc(it);
+    box.appendChild(f);
+    stage.appendChild(box);
+    /* The iframe keeps the probe viewport's width, so media queries see what the gate saw, and
+       is scaled to the pane; its height fills the stage and it scrolls inside. */
+    function fit() {
+      var s = Math.min(1, stage.clientWidth / vp.width);
+      var h = stage.clientHeight / s;
+      box.style.transform = 'scale(' + s + ')';
+      box.style.width = vp.width + 'px';
+      box.style.height = stage.clientHeight + 'px';
+      f.style.height = h + 'px';
+      stage.style.overflow = 'hidden';
+    }
+    fit();
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(stage);
+  }
+
+  function renderItem(it) {
+    view.filter = null;
+    var vps = it.viewports.length ? it.viewports : [{ name: 'desktop', width: 1280, height: 900 }];
+    if (view.vp >= vps.length) view.vp = 0;
+    main.innerHTML = '';
+    var chips = '<span class="chip ' + gateTone(it) + '">' + esc(gateLabel(it)) + '</span>';
+    if (it.status) chips += '<span class="chip">' + esc(it.status) + '</span>';
+    var openFindings = it.findings.filter(function (f) { return /^open|^filed/.test(f.disposition || ''); }).length;
+    if (it.findings.length) chips += '<span class="chip ' + (openFindings ? 'warn' : '') + '"><b>' + it.findings.length + '</b> findings · ' + openFindings + ' open</span>';
+    main.appendChild(el('<header class="head"><div class="eyebrow">' + esc(DATA.project.designSystemName) + ' · ' + esc(it.kind) + ' · v' + esc(DATA.project.version) + ' · ' + esc(DATA.project.commit) + '</div>' +
+      '<h1>' + esc(it.title) + '</h1><div class="meta"><span class="mono">' + esc(it.id) + '</span><span>Built ' + esc(DATA.project.builtAt) + '</span>' +
+      (it.figmaUrl ? '<a href="' + esc(it.figmaUrl) + '" target="_blank" rel="noopener">Open in Figma</a>' : '') + '</div><div class="chips">' + chips + '</div></header>'));
+
+    var cmp = el('<section class="block"><div class="block-head"><h2>Figma and the build</h2><div class="controls">' +
+      '<div class="seg" role="group" aria-label="Viewport">' + vps.map(function (v, i) { return '<button data-vp="' + i + '" aria-pressed="' + (i === view.vp) + '">' + esc(v.name) + ' ' + v.width + '</button>'; }).join('') + '</div>' +
+      '<div class="seg" role="group" aria-label="Panes"><button data-l="both" aria-pressed="' + (view.layout === 'both') + '">Side by side</button><button data-l="figma" aria-pressed="' + (view.layout === 'figma') + '">Figma</button><button data-l="build" aria-pressed="' + (view.layout === 'build') + '">Build</button></div>' +
+      '</div></div><p class="hint">Left is the frozen Figma frame the build was judged against. Right is the component, live on the real OutSystems UI base with this build\'s theme; hover and focus cells are held in state, and you can hover and tab through it. Gate page shows everything the gate measured, including sibling and collateral checks.</p>' +
+      '<div class="compare"></div></section>');
+    var grid = cmp.querySelector('.compare');
+    var figPane = el('<div class="pane"><div class="pane-bar"><span><strong>Figma</strong> · frozen ref</span><button class="copy" data-zoom>' + (view.figmaActual ? 'Fit width' : 'Actual size') + '</button></div><div class="stage' + (view.figmaActual ? ' actual' : '') + '"></div></div>');
+    var buildPane = el('<div class="pane"><div class="pane-bar"><span><strong>Build</strong> · <span class="mono">' + vps[view.vp].width + ' × ' + vps[view.vp].height + '</span></span><div class="seg" role="group" aria-label="What the build pane shows"><button data-m="demo" aria-pressed="' + (view.mode === 'demo') + '">Demo</button><button data-m="gate" aria-pressed="' + (view.mode === 'gate') + '">Gate page</button></div></div><div class="stage"></div></div>');
+    if (it.figma) figPane.querySelector('.stage').appendChild(el('<img alt="Figma frame for ' + esc(it.id) + '">')).src = it.figma;
+    else figPane.querySelector('.stage').innerHTML = '<p class="empty">No figma.png in this item\'s folder.</p>';
+    if (view.layout !== 'build') grid.appendChild(figPane);
+    if (view.layout !== 'figma') grid.appendChild(buildPane);
+    if (view.layout !== 'both') grid.classList.add('solo');
+    main.appendChild(cmp);
+    if (view.layout !== 'figma') {
+      if (it.body) mountFrame(it, buildPane.querySelector('.stage'), vps[view.vp]);
+      else buildPane.querySelector('.stage').innerHTML = '<p class="empty">No specimen.html yet, so there is nothing to render.</p>';
+    }
+    cmp.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-vp],[data-l],[data-zoom],[data-m]');
+      if (!b) return;
+      if (b.hasAttribute('data-vp')) view.vp = +b.getAttribute('data-vp');
+      if (b.hasAttribute('data-l')) view.layout = b.getAttribute('data-l');
+      if (b.hasAttribute('data-zoom')) view.figmaActual = !view.figmaActual;
+      if (b.hasAttribute('data-m')) view.mode = b.getAttribute('data-m');
+      renderItem(it);
+    });
+
+    var ledger = el('<section class="block"><div class="block-head"><h2>What the gate measured</h2><p class="hint">Computed values from this build next to the baseline a reviewer last judged. Colours, fonts and script results must match exactly; geometry within 1.5&nbsp;px is noise.</p></div><div class="ledger"></div></section>');
+    main.appendChild(ledger);
+    renderLedger(it, ledger.querySelector('.ledger'));
+
+    var fnd = el('<section class="block"><div class="block-head"><h2>Findings</h2><p class="hint">Design conflicts built as drawn and raised back to design, from findings/findings-register.md.</p></div><div class="findings"></div></section>');
+    var fl = fnd.querySelector('.findings');
+    if (!it.findings.length) fl.innerHTML = '<p class="muted">None raised on this item.</p>';
+    it.findings.forEach(function (f) {
+      fl.appendChild(el('<article class="finding sev-' + esc(f.sev) + '"><div class="finding-top"><span class="fid">' + esc(f.id) + '</span><span class="chip">' + esc(f.sev) + '</span><span class="muted">' + esc(f.type) + '</span><span>' + esc(f.disposition) + '</span>' +
+        (f.issue ? '<a href="' + esc(f.issue) + '" target="_blank" rel="noopener">Issue</a>' : '') + '</div><p>' + esc(f.summary) + '</p></article>'));
+    });
+    main.appendChild(fnd);
+
+    var code = el('<section class="block"><div class="block-head"><h2>Paste into ODC</h2><p class="hint">Theme CSS goes below the OutSystems UI base in the Theme editor; a Web Component .js is a Script resource. Tokens travel separately in dist/theme.css.</p></div><div class="code"></div></section>');
+    var cl = code.querySelector('.code');
+    if (!it.code.length) cl.innerHTML = '<p class="muted">This item ships through dist/theme.css only.</p>';
+    it.code.forEach(function (c, i) {
+      var d = el('<details><summary><span class="mono">' + esc(c.path) + '</span><button class="copy" data-copy="' + i + '">Copy</button></summary><pre></pre></details>');
+      d.querySelector('pre').textContent = c.text;
+      cl.appendChild(d);
+    });
+    cl.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-copy]');
+      if (!b) return;
+      e.preventDefault();
+      var text = it.code[+b.getAttribute('data-copy')].text;
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); };
+      try {
+        navigator.clipboard.writeText(text).then(done, function () { b.closest('details').open = true; });
+      } catch (err) { b.closest('details').open = true; }
+    });
+    main.appendChild(code);
+
+    if (it.ref) {
+      var ref = el('<details class="ref"><summary>Frozen ref — ref.md, the spec of record this build was judged against</summary><div class="ref-body"></div></details>');
+      var rb = ref.querySelector('.ref-body');
+      ref.addEventListener('toggle', function () {
+        if (!ref.open || rb.childElementCount) return;
+        if (window.marked) rb.innerHTML = window.marked.parse(it.ref);
+        else { var p = document.createElement('pre'); p.textContent = it.ref; rb.appendChild(p); }
+      });
+      main.appendChild(ref);
+    }
+  }
+
+  function go(id) {
+    view.item = id && byId[id] ? id : (multi ? null : items[0].id);
+    renderRail();
+    if (view.item) renderItem(byId[view.item]); else renderOverview();
+    if (multi) { try { history.replaceState(null, '', view.item ? '#' + view.item : '#'); } catch (e) {} }
+    window.scrollTo(0, 0);
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-go]');
+    if (b) go(b.getAttribute('data-go'));
+  });
+  go((location.hash || '').slice(1));
+})();
+</script>

@@ -1,7 +1,8 @@
 {
-  "_schema_note": "The loop's durable memory, and A CACHE — never an authority. The board owns intent, the repository owns content, this file owns nothing; reconcile it against both before advancing (see the pre-flight in loop/README.md). Empty skeleton: fill from loop/goal.md on the first run. Item and finding shapes are documented in loop/README.md. `tiers` is a PROJECT-CONFIGURABLE list, not a fixed taxonomy — add or rename tiers to match this project's dependency graph, and keep `current_tier` pointing at one of them. The board POINTER is deliberately not here: it is a project value and lives in project.config.json -> board. Only DERIVED board ids are cached here, in board_cache.",
+  "_schema_note": "The loop's durable memory, and A CACHE — never an authority. The board owns intent, the repository owns content, this file owns nothing; reconcile it against both before advancing (the design-loop and board-sync skills in the outsystems-loop plugin say how). Empty skeleton: fill from loop/goal.md on the first run. Item and finding shapes are documented in the plugin's design-loop skill. Items carry `review_url` (their review Artifact); `library_review_url` is the library page. `tiers` is a PROJECT-CONFIGURABLE list, not a fixed taxonomy — add or rename tiers to match this project's dependency graph, and keep `current_tier` pointing at one of them. The board POINTER is deliberately not here: it is a project value and lives in project.config.json -> board. Only DERIVED board ids are cached here, in board_cache.",
 
   "goal": "",
+  "library_review_url": null,
   "figma_url": "<<FIGMA_URL>>",
   "figma_file_key": "<<FIGMA_FILE_KEY>>",
   "branch": "",

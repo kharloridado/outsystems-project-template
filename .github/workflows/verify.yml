@@ -2,7 +2,7 @@
 #
 # NEEDS NO SECRETS AND NO API KEY. The expensive judgment ("is this right?" — the
 # render vs the frozen Figma ref) happens once, at build time, by the checker, and is
-# frozen into each item's loop/refs/<id>/measurements.json. CI only asks the narrower
+# frozen into each item's specs/<kind>/<id>/measurements.json. CI only asks the narrower
 # question "did this change?", which is arithmetic.
 #
 # The browser is the Chrome already installed on the GitHub runner image, reached
@@ -34,8 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # vendor/outsystems-ui is the real OutSystems UI base the preview stacks
-          # under the theme. Without it every stylesheet 404s, the cascade falls
+          # vendor/outsystems-ui is the real OutSystems UI base every specimen page
+          # stacks under the theme. Without it every stylesheet 404s, the cascade falls
           # back, and the gate measures a page nobody will ever see.
           submodules: recursive
 
@@ -46,7 +46,7 @@ jobs:
 
       - run: npm ci
 
-      # Proves the harness itself works — browser launches, server serves, probes
+      # Proves the harness itself works — browser launches, pages are served, probes
       # read computed style — independently of any project state. It runs FIRST and
       # depends on nothing the project configures, so a red X here always means the
       # harness, never the config. This runs on the template too: it is the step that
@@ -61,18 +61,46 @@ jobs:
         if: env.IS_TEMPLATE != 'true'
         run: npm run check:config
 
+      # Structural guard for every HAND-EDITED stylesheet, not just the assembled theme.
+      # An unclosed rule is not a syntax error: the parser reads what follows as more
+      # declarations of that rule, drops them, and reports nothing — so the page silently
+      # renders without a whole section. It has happened three times here, every one of
+      # them a merge conflict resolved across a rule boundary, and the last one kept main
+      # red for three runs while the gate blamed a component whose CSS was fine.
+      # Reads no project config, so it runs on the template too.
+      - name: check:stylesheets
+        run: npm run check:stylesheets
+
+      # Builds review/vendor/outsystems-ui/outsystems-ui.css from the submodule.
+      # Reads no project config, so it runs everywhere.
+      #
+      # MUST run BEFORE build:theme. `npm run build:theme` chains validate-theme.mjs,
+      # which resolves every var(--token) in the assembled theme — and a block override
+      # legitimately borrows framework-owned tokens (--color-neutral-0, --space-m) that
+      # OutSystems UI declares and we do not. Without this compiled base the validator
+      # has nothing to resolve them against and reports them as dangling: 14 false
+      # errors that failed three checker-PASSED items (#9, #12, #14) for a file that
+      # was simply not built yet. The validator says so itself in that run's output —
+      # "outsystems-ui.css is missing, so framework tokens cannot be resolved" — and it
+      # was read as a component defect because the gate is a hard wall by design.
+      #
+      # It stayed invisible on main because main carries no block CSS: token files
+      # DECLARE the names they use, so they validate fine with no framework present.
+      # The first item to borrow one is the first item to hit this.
+      #
+      # Anything that reads the compiled framework base belongs below this line.
+      - name: build:osui
+        run: npm run build:osui
+
       # Assembles dist/theme.css, then validates it: balanced braces, parses as real
-      # CSS, and every var(--token) resolves. A dangling var() fails silently at
-      # runtime and renders subtly wrong with no error anywhere.
+      # CSS, and every var(--token) resolves — against the token layer AND the
+      # framework base compiled above. A dangling var() fails silently at runtime and
+      # renders subtly wrong with no error anywhere. Then the token audit: every visual
+      # literal in src/ is a token, or carries the finding or ref section that allows it.
       # Chains check:config, so it cannot run on the template either.
       - name: build:theme
         if: env.IS_TEMPLATE != 'true'
         run: npm run build:theme
-
-      # Builds preview/vendor/outsystems-ui/outsystems-ui.css from the submodule.
-      # Reads no project config, so it runs everywhere.
-      - name: build:osui
-        run: npm run build:osui
 
       # Re-measures every committed probes.json and diffs against its committed
       # baseline. Computed strings diff exactly; geometry is compared with a
@@ -81,13 +109,20 @@ jobs:
       - name: fidelity regression
         run: npm run gate:regression
 
-      - name: upload measurements
-        if: always()
+      # Evidence, not a gate: the gates above already passed or failed. The library review
+      # page shows every item's measurements against its baseline, so a red run can be read
+      # in a browser. Non-blocking so an exhausted artifact quota cannot turn green red.
+      - name: review page
+        if: always() && env.IS_TEMPLATE != 'true'
+        continue-on-error: true
+        run: npm run review
+
+      - name: upload review
+        if: always() && env.IS_TEMPLATE != 'true'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: gate-output
-          path: |
-            loop/refs/**/measurements.json
-            loop/refs/**/rendered*.png
+          name: review
+          path: review/index.html
           if-no-files-found: ignore
           retention-days: 14

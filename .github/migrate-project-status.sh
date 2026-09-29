@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring an EXISTING GitHub Project board up to the board-driven spec (WORKFLOW.md):
+# Bring an EXISTING GitHub Project board up to the board-driven spec (CLAUDE.md, "Board mode"):
 # the 8-lane Status gate, plus the custom fields the loop reads.
 #
 # Use this when the board already exists — including a stock board created in the GitHub UI,
@@ -64,7 +64,7 @@ JSON
 #     "Reviewed" used to mean "the reviewer left comments to implement". In the new gate that
 #     is expressed by moving a card back to Ready with comments on it — which board-advance
 #     actually reads and rebuilds from. This mapping is what turns a documented-but-dead
-#     protocol (WORKFLOW.md §3) into a live one.
+#     protocol (CLAUDE.md, "Board mode") into a live one.
 map_lane() {
   case "$1" in
     Backlog|Ready|"In Progress"|"Ready for Review"|Approved|Handover|Done|Blocked) echo "$1" ;;
