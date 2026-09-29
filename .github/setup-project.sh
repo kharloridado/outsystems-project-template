@@ -20,7 +20,7 @@ echo "Project number: $NUM"
 gh project link "$NUM" --owner "$OWNER" --repo "$REPO" || true
 
 # ---------------------------------------------------------------------------
-# Status — the review gate the whole workflow depends on (see WORKFLOW.md).
+# Status — the review gate the whole workflow depends on (see CLAUDE.md, "Board mode").
 #
 # GitHub creates a default Status field with Todo / In Progress / Done. That is NOT
 # the gate this workflow documents, and the previous version of this script left the
@@ -58,4 +58,4 @@ echo "Next — record the board in project.config.json (NOT in loop/state.json, 
 echo "    npm run init      # paste https://github.com/users/$OWNER/projects/$NUM when asked"
 echo
 echo "Tip: in the Project UI add a Board view grouped by Status (kanban) and a Table view grouped by Tier."
-echo "Reminder: only 'Approved' ships, and only you move a card there. See WORKFLOW.md."
+echo "Reminder: only 'Approved' ships, and only you move a card there. See CLAUDE.md, \"Board mode\"."

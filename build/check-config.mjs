@@ -20,7 +20,7 @@ import { projectConfig, root } from "./lib/project-config.mjs";
 
 const PLACEHOLDER_RE = /<<[A-Z_/]+>>/;
 const EXAMPLE_PREFIX = "acme-"; // the neutral prefix used in template/skill examples
-const SCAN_DIRS = ["tokens", "src", "preview", "loop", "handover", "findings", "design", "style-guide"];
+const SCAN_DIRS = ["tokens", "src", "specs", "loop", "handover", "findings", "build/review"];
 const SCAN_EXT = /\.(css|js|html|md|json|sh)$/;
 const errors = [];
 
@@ -100,8 +100,8 @@ if (boardOn) {
  * do not exist, routes work to L5 that the framework already ships, and the checker cannot
  * score framework grain at all. Every one of those looks like a normal run.
  *
- * That is the difference from vendor/outsystems-ui, which fails loudly by 404-ing the
- * preview. This one degrades quietly, so it gets a hard gate instead. */
+ * That is the difference from vendor/outsystems-ui, which fails loudly: build:osui cannot
+ * compile and the specimen pages have no framework base. This one degrades quietly, so it gets a hard gate instead. */
 const PK_ROOT = join(root, "vendor", "outsystems-frontend-skills");
 const PK_SENTINEL = join(PK_ROOT, "ui-frameworks", "outsystems-ui", "blocks-index.md");
 const pk = cfg.platformKnowledge ?? {};
@@ -149,12 +149,8 @@ function walk(dir) {
 
 function scan(path) {
   const rel = relative(root, path).replace(/\\/g, "/");
-  // The template's own worked examples are allowed to keep the example prefix.
-  // `src/examples/` exists precisely so the reference component never sits in a real
-  // source path — copy it out and rename it; do not build on top of it in place.
-  const isExampleDoc =
-    /(^|\/)(EXAMPLE-|MENTOR-STUDIO-PROMPT|README|LESSONS|WORKFLOW|CHANGELOG)/i.test(rel) ||
-    rel.startsWith("src/examples/");
+  // Docs that show the example prefix on purpose (templates, the Mentor prompt, history).
+  const isExampleDoc = /(^|\/)(EXAMPLE-|MENTOR-STUDIO-PROMPT|README|LESSONS|CHANGELOG)/i.test(rel);
   const text = readFileSync(path, "utf8");
 
   text.split("\n").forEach((line, i) => {
@@ -162,7 +158,7 @@ function scan(path) {
       errors.push(`${rel}:${i + 1} — unfilled placeholder ${line.match(PLACEHOLDER_RE)[0]}`);
     }
     // Real code must never carry the example prefix — that's the `rnt-` leak, exactly.
-    if (line.includes(EXAMPLE_PREFIX) && !isExampleDoc && /^(tokens|src|preview|style-guide)\//.test(rel)) {
+    if (line.includes(EXAMPLE_PREFIX) && !isExampleDoc && /^(tokens|src|specs|build\/review)\//.test(rel)) {
       errors.push(`${rel}:${i + 1} — the template's example prefix "${EXAMPLE_PREFIX}" leaked into real code`);
     }
   });

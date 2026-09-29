@@ -23,7 +23,7 @@ import { stdin, stdout } from "node:process";
 import { root } from "./lib/project-config.mjs";
 
 const CONFIG = join(root, "project.config.json");
-const SCAN_DIRS = ["", "loop", "handover", "findings", "design", "docs", "style-guide", "tokens", "src", "preview"];
+const SCAN_DIRS = ["", "loop", "handover", "findings", "specs", "tokens", "src"];
 const SCAN_EXT = /\.(md|json|css|js|html|sh)$/;
 
 /* Flags let this run non-interactively (CI, scripted bootstrap, a test harness):
@@ -220,7 +220,7 @@ Next:
   5. ${boardOwner
        ? `board #${boardNumber} is already configured — if it predates the 8-lane gate, run:\n     ./.github/migrate-project-status.sh ${boardOwner} ${boardNumber} --confirm`
        : `./.github/setup-project.sh  <owner> ${repo || "<owner/repo>"} "Design System v1"\n     (then re-run \`npm run init\` with the board URL to enable board-driven mode)`}
-  6. fill in design/brand-guidelines.md + design/figma-links.md
+  6. write specs/foundations/ from the brand guidelines, and log the Figma nodes in loop/figma-links.md
   7. set the goal in loop/goal.md${boardOwner
        ? " (Inventory source = board — the board is the queue)"
        : " + the SIGNED-OFF component inventory"}

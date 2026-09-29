@@ -58,7 +58,7 @@ if [ -z "$BOARD_OWNER" ] || [ -z "$BOARD_NUMBER" ]; then
 fi
 
 # A dirty tree means a routine could sweep an interactive session's work into a commit.
-# LESSONS.md §4.3 — this happened, once, and cost real work.
+# loop/LESSONS.md §2.3 — this happened, once, and cost real work.
 if [ -n "$(git status --porcelain)" ]; then
   say "⚠ working tree is dirty — refusing to run so a routine cannot commit your work."
   git status --short >&2

@@ -13,7 +13,7 @@ The loop does not build from a Figma page, a screenshot, or a conversation. It b
 | Field | Value |
 |---|---|
 | **Inventory source** | `<board \| artifact>` |
-| Inventory artifact | `<the node / sheet / doc holding the confirmed list — or, when source is "board", the Project board URL + the generated deliverables.md>` |
+| Inventory artifact | `<the node / sheet / doc holding the confirmed list — or, when source is "board", the Project board URL + the library review Artifact>` |
 | Signed off by | `<name, role — someone who can actually commit to the list>` |
 | Date signed off | `<yyyy-mm-dd>` |
 | Supersedes | `<previous inventory, if any>` |
@@ -23,13 +23,13 @@ The loop does not build from a Figma page, a screenshot, or a conversation. It b
 - When **`Inventory source = artifact`**, the row is a line in the signed table named above. A component that is in Figma but not in the inventory is `needs-human`, not `queued`.
 - When **`Inventory source = board`**, the row *is* the card, and the signature is a scope owner having moved it to **`Ready`**. A card that reached `Ready` any other way, or whose "in the agreed scope" box is unticked, is `Blocked` — not `queued`. The loop never moves a card into `Ready` itself.
 
-Either way: a component with no Figma node and no written spec is blocked on a ref (see `loop/refs/README.md`), not built from guesswork.
+Either way: a component with no Figma node and no written spec is blocked on a ref (see `specs/README.md`), not built from guesswork.
 
 This section is first, and required, because of what it costs when it is missing. On the source project this template is derived from, two components were built end to end — maker + checker PASS, committed, handover Task opened — and an entire speculative component set was designed and coded, then thrown away, because no confirmed inventory existed and the client's real list turned out to be different. That is the most expensive waste this loop can produce, and refusing to start without an inventory of record prevents all of it.
 
 **What the board version does NOT give you, stated plainly.** A signed table is client-facing; a board is not, and that was the *other* half of that incident. Two mitigations, both of which need a human:
 
-1. `npm run board:sync` regenerates **`deliverables.md`** from the board — a diffable, in-repo, showable snapshot of exactly what was accepted into scope and when. Have the scope owner counter-sign it on a cadence. That is the artifact that stands in for the signed table.
+1. `npm run board:sync` republishes the **library review page** — a showable snapshot of every deliverable, its status, fidelity and findings, with a version per run. Have the scope owner counter-sign it on a cadence. That is the artifact that stands in for the signed table.
 2. Restrict write access on the board to people who can actually commit to scope, because **the loop cannot verify who moved a card.** As far as we can tell, Projects v2 does not expose the actor behind a field-value change in a queryable way, and v2 lane moves do not appear in the issue timeline the way classic project-column moves did. *(This is an assessment, not a verified fact — if you find the query, replace this paragraph with it.)* Until then, "a scope owner moved it to `Ready`" is enforced by access control, not by the loop.
 
 ## Figma
@@ -41,7 +41,7 @@ This section is first, and required, because of what it costs when it is missing
 | In scope | `<"entire library" | named pages / frames / node ids>` |
 | Out of scope | `<pages deliberately excluded — state them explicitly>` |
 
-**Track the file key, not just the URL.** Design libraries get duplicated, forked and re-versioned, and a fork carries a *different file key* while looking identical in conversation and in a screenshot. Every frozen ref records the file key it was pulled from (`loop/refs/<item-id>/spec.md`). If that key differs from the key above, **the ref is stale**: the item becomes `needs-re-ref`, and neither the maker nor the checker may trust the values it froze. On the source project a second library file appeared mid-build and silently re-versioned component values; every ref frozen against the old key quietly became wrong. Record every key change in `design/figma-links.md`.
+**Track the file key, not just the URL.** Design libraries get duplicated, forked and re-versioned, and a fork carries a *different file key* while looking identical in conversation and in a screenshot. Every frozen ref records the file key it was pulled from (`specs/<kind>/<item-id>/ref.md`). If that key differs from the key above, **the ref is stale**: the item becomes `needs-re-ref`, and neither the maker nor the checker may trust the values it froze. On the source project a second library file appeared mid-build and silently re-versioned component values; every ref frozen against the old key quietly became wrong. Record every key change in `loop/figma-links.md`.
 
 ## Mode
 

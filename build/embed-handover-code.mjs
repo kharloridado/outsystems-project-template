@@ -18,6 +18,12 @@
  * fully-filled one. When `mentor` is absent the prompt is derived from the artifact kind
  * (Web Component / native-widget restyle / Style-Guide reference).
  *
+ * `mentor: { text: "…" }` is the escape hatch: the prompt is taken VERBATIM from the map.
+ * It exists because the derived prompts each describe one archetype, and a component whose
+ * ODC side is a hand-built Block of native widgets — inputs, events, a Client Action — is
+ * none of them. Without it the only way to keep such a prompt is to hand-edit the handover,
+ * which this script then overwrites on its next run.
+ *
  * Usage: node build/embed-handover-code.mjs */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
@@ -85,39 +91,62 @@ function wiringOf(entry) {
   return null;
 }
 
-// "close" → "handleClose"; dash-joined events camel-case ("action-done" → "handleActionDone").
-function handlerName(event) {
-  return "handle" + event.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
+// "OnChange" → "RaiseOnChange": the Block Client Action whose one Trigger Event node raises it.
+function raiseName(blockEvent) {
+  return "Raise" + blockEvent;
 }
 
-/* The two "Run JavaScript" bodies: OnReady attaches (storing each handler on $public so it can
- * be removed by reference) and OnDestroy removes. The resolver mirrors the shipped
- * window.<Ns>Toast resolve() — the id may point at the element itself OR the wrapping
- * Block/Container. customEvents entries are [event, BlockEvent, detailArg?]. */
+// A Raise action carries the event's argument as one input, named by the optional 4th tuple
+// element (default "Value"); an event with no detailArg has no input.
+function raiseParam([, , detail, param]) {
+  return detail ? (param || "Value") : null;
+}
+
+// "wf-" → "__wfHandlers"; hyphenated prefixes camel-case ("acme-ds-" → "__acmeDsHandlers").
+const HANDLERS = "__" + P.split("-").filter(Boolean)
+  .map((s, i) => (i ? s.charAt(0).toUpperCase() + s.slice(1) : s)).join("") + "Handlers";
+
+/* The two "Run JavaScript" bodies. Handlers live on the element (el.<HANDLERS>), never on
+ * $public: $public is one object shared by every instance of the Block, so a second instance
+ * overwrote the first's handlers and destroying either disconnected the other. OnDestroy looks
+ * the element up again from its own WidgetId. Events are raised through Raise<Event> Block
+ * Client Actions because $actions reaches Client Actions, not Block events. The resolver
+ * mirrors the shipped window.<Ns>Toast resolve() — the id may point at the element itself OR
+ * the wrapping Block/Container. customEvents entries are [event, BlockEvent, detailArg?, param?]. */
 function eventWiring(tag, customEvents) {
   // pad the quoted event token so the handler column lines up
   const qW = Math.max(...customEvents.map(([ev]) => ev.length + 2));
   const q = (ev) => `'${ev}'`.padEnd(qW);
-
-  const onReady = [
-    `// Block OnReady — "Run JavaScript" node. Input: WidgetId = <ElementName>.Id`,
+  const resolve = [
     `var root = document.getElementById($parameters.WidgetId);`,
     `var el = (root && root.tagName && root.tagName.toLowerCase() === '${tag}')`,
     `  ? root : (root ? root.querySelector('${tag}') : null);`,
-    `if (el) {`,
-    `  $public.el = el;                       // stash for OnDestroy cleanup`,
-    ...customEvents.map(([ev, blockEv, detail]) =>
-      `  $public.${handlerName(ev)} = function (e) { $actions.${blockEv}(${detail || ""}); };`),
-    ...customEvents.map(([ev]) =>
-      `  el.addEventListener(${q(ev)}, $public.${handlerName(ev)});`),
+  ];
+  const each = (method) => [
+    `  Object.keys(el.${HANDLERS}).forEach(function (type) {`,
+    `    el.${method}(type, el.${HANDLERS}[type]);`,
+    `  });`,
+  ];
+
+  const onReady = [
+    `// Block OnReady — "Run JavaScript" node. Input: WidgetId = <ElementName>.Id`,
+    ...resolve,
+    `if (el && !el.${HANDLERS}) {`,
+    `  el.${HANDLERS} = {`,
+    ...customEvents.map(([ev, blockEv, detail], i) =>
+      `    ${q(ev)}: function (e) { $actions.${raiseName(blockEv)}(${detail || ""}); }` +
+      (i < customEvents.length - 1 ? "," : "")),
+    `  };`,
+    ...each("addEventListener"),
     `}`,
   ].join("\n");
 
   const onDestroy = [
-    `// Block OnDestroy — "Run JavaScript" node. Uses the reference stashed in OnReady.`,
-    `if ($public.el) {`,
-    ...customEvents.map(([ev]) =>
-      `  $public.el.removeEventListener(${q(ev)}, $public.${handlerName(ev)});`),
+    `// Block OnDestroy — "Run JavaScript" node. Input: WidgetId = <ElementName>.Id`,
+    ...resolve,
+    `if (el && el.${HANDLERS}) {`,
+    ...each("removeEventListener"),
+    `  delete el.${HANDLERS};`,
     `}`,
   ].join("\n");
 
@@ -129,29 +158,51 @@ function wiringSection(entry) {
   if (!w) return null;
   const { onReady, onDestroy } = eventWiring(w.tag, w.customEvents);
   const rows = w.customEvents.map(([ev, blockEv, detail]) =>
-    `| \`${ev}\` | \`${blockEv}(${detail || ""})\` |`);
+    `| \`${ev}\` | \`$actions.${raiseName(blockEv)}(${detail || ""})\` | \`${blockEv}\` |`);
+  const actions = w.customEvents.map((c) => {
+    const param = raiseParam(c);
+    return param
+      ? `| \`${raiseName(c[1])}\` | \`${param}\` | one Trigger Event → \`${c[1]}\`, parameter = \`${param}\` |`
+      : `| \`${raiseName(c[1])}\` | — | one Trigger Event → \`${c[1]}\` |`;
+  });
   return [
     WIRING_MARKER,
     ``,
     `> The component's CustomEvents are wired in the Block's **OnReady** and cleaned up in`,
     `> **OnDestroy** — the declarative "Handle Events" path is unreliable for custom elements.`,
     `> Give the \`<${w.tag}>\` element (or its wrapping Block) a **Name** and pass its`,
-    `> platform-generated \`.Id\` to each "Run JavaScript" node as \`WidgetId\`. Paste these two`,
-    `> blocks verbatim — they store each handler on \`$public\` so OnDestroy removes it by`,
-    `> reference. (If your ODC version doesn't persist \`$public\` across OnReady/OnDestroy,`,
-    `> stash the handlers on the element instead — \`el._loopHandlers = { … }\`.)`,
+    `> platform-generated \`.Id\` to **both** "Run JavaScript" nodes as \`WidgetId\`. Paste the`,
+    `> two blocks verbatim.`,
     ``,
-    `| CustomEvent | raises Block event |`,
-    `|---|---|`,
+    `**Store nothing on \`$public\`.** It is one object shared by every instance of the Block, not`,
+    `one per instance: with two instances on a screen, the second OnReady overwrites the first's`,
+    `handlers, and destroying either one disconnects the other's events. The handlers are kept on`,
+    `the element itself (\`el.${HANDLERS}\`), and OnDestroy finds the element again from its own`,
+    `\`WidgetId\`.`,
+    ``,
+    `| CustomEvent | calls | raises Block event |`,
+    `|---|---|---|`,
     ...rows,
     ``,
-    `**OnReady** — resolve the element, attach listeners, stash for cleanup:`,
+    `### Block Client Actions — the bridge from JavaScript to the events`,
+    ``,
+    `\`$actions\` in a "Run JavaScript" node reaches **Client Actions**, not Block events — only a`,
+    `**Trigger Event** node raises a Block event. Create one Client Action **on the Block** per`,
+    `event, each containing a **single Trigger Event node** and nothing else:`,
+    ``,
+    `| Client Action | Input | Body |`,
+    `|---|---|---|`,
+    ...actions,
+    ``,
+    `Give each input the same data type as the Block event's parameter.`,
+    ``,
+    `**OnReady** — resolve the element, attach listeners, keep them on the element:`,
     ``,
     "```js",
     onReady,
     "```",
     ``,
-    `**OnDestroy** — remove the listeners:`,
+    `**OnDestroy** — resolve the element again, remove its listeners:`,
     ``,
     "```js",
     onDestroy,
@@ -176,6 +227,13 @@ function wcFilled(m) {
   const attrW = Math.max(...m.attrs.map(([a]) => a.length));
   const attrs = m.attrs.map(([a, e]) => `     ${a.padEnd(attrW)} = ${e}`).join("\n");
   const ce = m.customEvents.map(([c, ev]) => `the "${c}" CustomEvent triggers ${ev}`).join(", and ");
+  const raiseW = Math.max(...m.customEvents.map(([, ev]) => raiseName(ev).length + 2));
+  const raises = m.customEvents.map((c) => {
+    const param = raiseParam(c);
+    return `        - ${`"${raiseName(c[1])}"`.padEnd(raiseW)} : ` + (param
+      ? `input ${param}; one Trigger Event node → ${c[1]}, parameter = ${param}.`
+      : `no inputs; one Trigger Event node → ${c[1]}.`);
+  });
 
   // Static-Entity note (Type/Position/etc. are enumerations, not free Text).
   const seLines = (m.staticEntities || []).map((e) => {
@@ -236,13 +294,19 @@ function wcFilled(m) {
     `   Static-Entity inputs bind directly (e.g. type = Type) — the Value attribute is the`,
     `   record Identifier. Use If(flag,"true","false") for every Boolean (values, not presence).`,
     ``,
-    `3. Wire CustomEvents to Block events: ${ce}. Do NOT use the declarative "Handle Events"`,
-    `   path (unreliable for custom elements). Instead add a "Run JavaScript" node in the Block's`,
-    `   OnReady that resolves the <${tag}>, addEventListener's each event (storing each handler on`,
-    `   $public so it can be removed), and raises the matching Block event; add a second`,
-    `   "Run JavaScript" node in OnDestroy that removeEventListener's them. The exact OnReady +`,
-    `   OnDestroy code is in this handover's "## Event wiring (OnReady / OnDestroy)" section —`,
-    `   paste it verbatim (you are placing provided JS, not authoring it).`,
+    `3. Wire CustomEvents to Block events: ${ce}.`,
+    `   a. A JavaScript node cannot raise a Block event directly — $actions reaches Client`,
+    `      Actions, and only a Trigger Event node raises an event. Create one Client Action ON`,
+    `      THE BLOCK per event, each a single Trigger Event node:`,
+    ...raises,
+    `   b. Do NOT use the declarative "Handle Events" path (unreliable for custom elements).`,
+    `      Add a "Run JavaScript" node in the Block's OnReady and a second in OnDestroy, each`,
+    `      with a WidgetId (Text) input = <the <${tag}> element's Name>.Id. OnReady attaches the`,
+    `      listeners and calls the Raise actions from 3a; OnDestroy removes them. The exact code`,
+    `      is in this handover's "## Event wiring (OnReady / OnDestroy)" section — paste it`,
+    `      verbatim (you are placing provided JS, not authoring it).`,
+    `   c. Store nothing on $public: it is one shared object, not one per Block instance, and a`,
+    `      second instance on the screen would lose its events.`,
     ...helperStep,
     ``,
     `Constraints: never edit the OutSystems UI module; add no CSS or hard-coded values (styling`,
@@ -359,10 +423,17 @@ function wcGeneric(block, tag, jsFile, dest) {
     `   If(Flag, "true", "false") — not presence.`,
     `3. Wire each CustomEvent to its Block event in the Block's OnReady (attach) and OnDestroy`,
     `   (remove) — not via the declarative "Handle Events" path, which is unreliable for custom`,
-    `   elements. Add a "Run JavaScript" node in OnReady that resolves the <${tag}>,`,
-    `   addEventListener's each event (storing each handler on $public), and raises the Block`,
-    `   event; add a second in OnDestroy that removeEventListener's them. Paste the verbatim`,
-    `   OnReady + OnDestroy code from this handover's "## Event wiring (OnReady / OnDestroy)" section.`,
+    `   elements.`,
+    `   a. A JavaScript node cannot raise a Block event directly — $actions reaches Client`,
+    `      Actions, and only a Trigger Event node raises an event. For each Block event create a`,
+    `      Client Action ON THE BLOCK named "Raise<Event>" (e.g. "RaiseOnChange") containing a`,
+    `      single Trigger Event node, with one input per event parameter passed straight through.`,
+    `   b. Add a "Run JavaScript" node in OnReady and a second in OnDestroy, each with a WidgetId`,
+    `      (Text) input = <the <${tag}> element's Name>.Id. Paste the verbatim code from this`,
+    `      handover's "## Event wiring (OnReady / OnDestroy)" section: OnReady attaches the`,
+    `      listeners and calls the Raise actions; OnDestroy removes them.`,
+    `   c. Store nothing on $public: it is one shared object, not one per Block instance, and a`,
+    `      second instance on the screen would lose its events.`,
     `4. If the component exposes a global helper (see its API section), give the element/Block`,
     `   a Name and pass its platform-generated runtime .Id, e.g.`,
     `   window.${NS}X.show($parameters.WidgetId) where the WidgetId input = <WidgetName>.Id.`,
@@ -416,6 +487,7 @@ function refGeneric(block, tag, jsFile) {
 
 function mentorPrompt(md, entry) {
   const m = entry.mentor;
+  if (m && m.text) return m.text;                   // verbatim prompt from the map
   if (m && m.kind === "web-component") return wcFilled(m);
   if (m && m.kind === "block") return blockFilled(m);
 

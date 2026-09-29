@@ -13,7 +13,7 @@ For a licensed vendor package (a Pro icon font is the usual case), the split is:
 
 | Committed | Not committed |
 | --- | --- |
-| The conversion / generation **scripts** (e.g. `build/optional/fontawesome/*.mjs`) | The font binaries (`.otf`, `.woff2`, `.ttf`) |
+| The conversion / generation **scripts** (e.g. a font-conversion script under `build/`) | The font binaries (`.otf`, `.woff2`, `.ttf`) |
 | The CSS **templates** they consume | The vendor's metadata file containing the **vector artwork** (glyph path data) |
 | Documentation of the pipeline | Any generated artifact that embeds those paths |
 

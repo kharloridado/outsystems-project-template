@@ -1,0 +1,240 @@
+/* specimen.css — layout chrome for specimen pages ONLY (<<CLASS_PREFIX>>specimen__* classes).
+ *
+ * Not a deliverable: nothing here is pasted into ODC. It loads LAST on every specimen page, after
+ * the framework and dist/theme.css, so it lays out specimens without inline styles.
+ *
+ * Every colour is a var(--color-*) resolved through the real cascade — no hex literal — so a
+ * wrong theme paints wrong swatches, visibly.
+ *
+ * EVERY var() BELOW MUST RESOLVE. A dangling var() here invalidates the declaration at
+ * computed-value time, on top of a rule the framework got right, and the gate's probes measure
+ * `body` and `h1` on this page. When a token is renamed or removed, grep here too. Use the
+ * framework's names (--font-size-h1…h6 / display / base / s / xs / label, --space-xs…xxl). */
+
+body {
+  /* No font-family and no line-height here on purpose. `html` carries the family (set by
+   * the theme from the project font-family token) and the framework's own `body` rule carries
+   * line-height: 1.5 — both inherit correctly. Restating either from chrome overrode the
+   * real cascade with an invalid value and hid the very thing the page exists to show. */
+  margin: 0;
+}
+
+.<<CLASS_PREFIX>>specimen__head {
+  padding: var(--space-l) var(--space-xl);
+  background-color: var(--color-primary);
+  color: var(--color-neutral-0);
+}
+
+.<<CLASS_PREFIX>>specimen__head h1 {
+  /* No font-size: the framework's own `h1` rule (var(--font-size-h1), 32px) is correct and
+   * is what the gate's `h1` probe is there to measure. The scaffold's --font-size-xl that
+   * used to sit here no longer exists. */
+  margin: 0 0 var(--space-xs);
+}
+
+.<<CLASS_PREFIX>>specimen__head p {
+  margin: 0;
+  font-size: var(--font-size-s);
+  opacity: 0.85;
+}
+
+.<<CLASS_PREFIX>>specimen__body {
+  padding: var(--space-xl);
+  max-width: 1100px;
+}
+
+.<<CLASS_PREFIX>>specimen__section {
+  margin-bottom: var(--space-xxl);
+}
+
+.<<CLASS_PREFIX>>specimen__section > h2 {
+  font-size: var(--font-size-h5);
+  border-bottom: 1px solid var(--color-neutral-3);
+  padding-bottom: var(--space-s);
+  margin-bottom: var(--space-m);
+}
+
+.<<CLASS_PREFIX>>specimen__note {
+  font-size: var(--font-size-s);
+  color: var(--color-neutral-8);
+  max-width: 70ch;
+}
+
+/* --- Finding call-out ---------------------------------------------------------
+ * Uses the framework's own semantic colours, not a decorative choice of ours. */
+.<<CLASS_PREFIX>>specimen__finding {
+  border-left: 4px solid var(--color-error);
+  background-color: var(--color-error-light);
+  padding: var(--space-s) var(--space-m);
+  margin: var(--space-m) 0;
+  font-size: var(--font-size-s);
+  max-width: 80ch;
+}
+
+.<<CLASS_PREFIX>>specimen__finding--medium {
+  border-left-color: var(--color-warning);
+  background-color: var(--color-warning-light);
+}
+
+.<<CLASS_PREFIX>>specimen__finding--low {
+  border-left-color: var(--color-neutral-5);
+  background-color: var(--color-neutral-1);
+}
+
+/* A finding that has been answered. It stays on the page rather than being deleted,
+ * because the rendered consequence is still there to look at — what changed is that it
+ * is now intended. Success colours, so it reads as settled at a glance. */
+.<<CLASS_PREFIX>>specimen__finding--resolved {
+  border-left-color: var(--color-success);
+  background-color: var(--color-success-light);
+}
+
+/* --- Swatch grid --------------------------------------------------------------
+ * Every tile paints itself with var(--color-<name>) supplied by an inline custom
+ * property on the element — the NAME is authored, the VALUE is resolved by the
+ * browser through the real cascade and read back by the readout script. */
+.<<CLASS_PREFIX>>specimen__swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-m);
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-l);
+}
+
+.<<CLASS_PREFIX>>specimen__swatch {
+  border: 1px solid var(--color-neutral-3);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: var(--font-size-s);
+}
+
+.<<CLASS_PREFIX>>specimen__chip {
+  height: 72px;
+  display: block;
+}
+
+.<<CLASS_PREFIX>>specimen__swatch-meta {
+  padding: var(--space-s);
+  background-color: var(--color-neutral-0);
+}
+
+.<<CLASS_PREFIX>>specimen__swatch-name {
+  display: block;
+  font-family: ui-monospace, monospace;
+  color: var(--color-neutral-10);
+  word-break: break-all;
+}
+
+.<<CLASS_PREFIX>>specimen__swatch-value {
+  display: block;
+  font-family: ui-monospace, monospace;
+  color: var(--color-neutral-8);
+}
+
+.<<CLASS_PREFIX>>specimen__swatch-origin {
+  display: inline-block;
+  margin-top: var(--space-xs);
+  padding: 0 var(--space-xs);
+  border-radius: 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background-color: var(--color-neutral-2);
+  color: var(--color-neutral-9);
+}
+
+
+/* --- Specimen rows ------------------------------------------------------------ */
+.<<CLASS_PREFIX>>specimen__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-m);
+  align-items: center;
+  margin-bottom: var(--space-m);
+}
+
+.<<CLASS_PREFIX>>specimen__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  max-width: 320px;
+}
+
+.<<CLASS_PREFIX>>specimen__label {
+  font-size: var(--font-size-s);
+  color: var(--color-neutral-8);
+  min-width: 130px;
+}
+
+.<<CLASS_PREFIX>>specimen__box {
+  padding: var(--space-m);
+  border: 1px solid var(--color-neutral-3);
+  border-radius: 4px;
+}
+
+/* --- Variant grid -------------------------------------------------------------
+ * One cell per drawn variant, so the five states of a component can be compared
+ * side by side the way the Figma variant set draws them. Chrome only. */
+.<<CLASS_PREFIX>>specimen__variants {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-m);
+  margin-bottom: var(--space-l);
+}
+
+.<<CLASS_PREFIX>>specimen__variant {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  border: 1px solid var(--color-neutral-2);
+  border-radius: 4px;
+  background-color: var(--color-neutral-0);
+}
+
+.<<CLASS_PREFIX>>specimen__variant-name {
+  font-family: ui-monospace, monospace;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-8);
+}
+
+/* --- Specimen grid ------------------------------------------------------------
+ * A grid of captioned cells, a dashed device frame so a `.phone` / `.tablet` scope is
+ * visible, and an icon stub so an icon slot has measurable ink. None of it is a design value. */
+.<<CLASS_PREFIX>>specimen__grid {
+  display: grid;
+  gap: var(--space-m);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  margin-bottom: var(--space-m);
+}
+
+.<<CLASS_PREFIX>>specimen__cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+}
+
+.<<CLASS_PREFIX>>specimen__caption {
+  color: var(--color-neutral-8);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.<<CLASS_PREFIX>>specimen__icon-stub {
+  background-color: var(--color-neutral-4);
+  block-size: 100%;
+  border-radius: var(--border-radius-soft);
+  display: block;
+  inline-size: 100%;
+}
+
+.<<CLASS_PREFIX>>specimen__device {
+  border: var(--border-size-s) dashed var(--color-neutral-4);
+  border-radius: var(--border-radius-soft);
+  flex: 1 1 260px;
+  padding: var(--space-base);
+}

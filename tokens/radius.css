@@ -1,0 +1,6 @@
+/* @section Radius */
+/* radius.css — the framework's radius steps this design changes, plus a <<CLASS_PREFIX>>* step for
+ * any the framework has no name for. Never override --border-radius-rounded at :root: the
+ * framework declares it per scope. */
+:root {
+}

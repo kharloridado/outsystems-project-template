@@ -82,12 +82,17 @@ Task — create these elements, referencing every element by the exact name give
 3. Wire the component's CustomEvents to the Block events:
    <<  "action"  CustomEvent  -> trigger OnAction
        "dismiss" CustomEvent  -> trigger OnDismiss  >>
+   A JavaScript node cannot raise a Block event directly — `$actions` reaches Client Actions,
+   and only a Trigger Event node raises an event. So first create one Client Action **on the
+   Block** per event, each a single Trigger Event node: <<"RaiseOnAction", "RaiseOnDismiss">>.
    Do NOT use the declarative "Handle Events" path (unreliable for custom elements). Instead add
    a "Run JavaScript" node in the Block's **OnReady** that addEventListener's each CustomEvent
-   (storing each handler on `$public` so it can be removed) and triggers the matching Block event,
-   and a second "Run JavaScript" node in **OnDestroy** that removeEventListener's them. Each
-   handover ships the exact OnReady + OnDestroy code in its "## Event wiring (OnReady / OnDestroy)"
-   section — paste it verbatim (placement, not authoring).
+   (keeping the handlers on the element itself) and calls the matching Raise action, and a
+   second "Run JavaScript" node in **OnDestroy** that looks the element up again by `WidgetId`
+   and removeEventListener's them. Store nothing on `$public` — it is one shared object, not
+   one per Block instance, and a second instance would lose its events. Each handover ships the
+   exact OnReady + OnDestroy code in its "## Event wiring (OnReady / OnDestroy)" section —
+   paste it verbatim (placement, not authoring).
 
 4. To address a specific instance, give the <<<<CLASS_PREFIX>>COMPONENT>> element (or its Block) a
    **Name**, then create a client action "<<Show COMPONENT>>" with a "Run JavaScript" node
@@ -166,12 +171,15 @@ Task — create these elements, referencing each by the exact name given:
    is the identifier. Use the If(flag,"true","false") form for the Boolean (values, not presence).
 
 3. Wire CustomEvents to Block events: the element's "action" CustomEvent triggers OnAction,
-   and its "dismiss" CustomEvent triggers OnDismiss. Do this in the Block's **OnReady** (a
-   "Run JavaScript" node that addEventListener's both events on the <<<CLASS_PREFIX>>toast> element,
-   storing each handler on `$public`, and raises the Block events) and clean up in **OnDestroy**
-   (a second "Run JavaScript" node that removeEventListener's them) — not via the declarative
-   "Handle Events" path. Paste the verbatim code from the handover's "## Event wiring
-   (OnReady / OnDestroy)" section.
+   and its "dismiss" CustomEvent triggers OnDismiss. First create two Client Actions on the
+   Block, each a single Trigger Event node — "RaiseOnAction" → OnAction and "RaiseOnDismiss"
+   → OnDismiss — because a JavaScript node's $actions reaches Client Actions, not Block
+   events. Then wire the Block's **OnReady** (a "Run JavaScript" node that addEventListener's
+   both events on the <<<CLASS_PREFIX>>toast> element, keeping the handlers on the element, and calls the
+   Raise actions) and clean up in **OnDestroy** (a second "Run JavaScript" node that finds the
+   element again by WidgetId and removeEventListener's them) — not via the declarative
+   "Handle Events" path. Store nothing on $public; it is shared by every Block instance. Paste
+   the verbatim code from the handover's "## Event wiring (OnReady / OnDestroy)" section.
 
 4. OutSystems generates element ids at runtime, so address a specific toast by its widget's
    platform .Id — not a hand-typed string. Give the <<<CLASS_PREFIX>>toast> element (or its Block) a

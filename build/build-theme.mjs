@@ -36,7 +36,7 @@ const outFile = join(root, "dist", "theme.css");
 
 /* The release version stamped at the top of dist/theme.css comes from package.json
  * — its single source of truth. Bumping a release = editing package.json "version"
- * (see RELEASING.md), then rebuilding so the pasted ODC theme self-identifies and
+ * (see CLAUDE.md, "Releasing"), then rebuilding so the pasted ODC theme self-identifies and
  * matches the CHANGELOG.md entry. */
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 

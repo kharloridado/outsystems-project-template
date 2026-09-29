@@ -1,19 +1,6 @@
 /* @section Typography / Type */
-/* typography.css — type scale + weights.
- *
- * A type ramp is often DEVICE-RESPONSIVE in the design source: the same token name can
- * resolve to a different size on desktop / tablet / mobile. That axis is usually invisible
- * on the design system's type page and only shows up in a component's example frames.
- * If a size is mode-bound, emit per-device tokens — do not freeze one device's value here. */
+/* typography.css — what OutSystems UI does not tokenize (family, extra weights, line-heights)
+ * as <<CLASS_PREFIX>>* tokens, plus any framework size this design changes. Self-hosted faces go
+ * in vendor/fonts/ and are declared with @font-face on the ODC theme module's path. */
 :root {
-  --font-family-base: system-ui, sans-serif; /* TODO: brand font */
-  --font-weight-regular: 400;
-  --font-weight-medium:  500;
-  --font-weight-bold:    700;
-
-  --font-size-s:  14px;
-  --font-size-m:  16px;
-  --font-size-l:  20px;
-  --font-size-xl: 24px;
-  --line-height-base: 1.5;
 }

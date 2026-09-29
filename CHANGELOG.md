@@ -9,7 +9,7 @@ MINOR for a new component or feature tier; bump the PATCH for fixes only.
 
 The version lives in one place: the `version` field in `package.json`. The theme build reads it
 and stamps it at the top of `dist/theme.css`, so the file a developer pastes into the ODC Theme
-editor self-identifies and matches its entry below. See [`RELEASING.md`](./RELEASING.md) for how
+editor self-identifies and matches its entry below. See `CLAUDE.md` → "Releasing" for how
 a release is cut.
 
 "Shipped" means merged to `main`. Merging is not the same as delivered: **only board-Approved

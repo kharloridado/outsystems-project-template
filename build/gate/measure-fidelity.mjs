@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 /* build/gate/measure-fidelity.mjs — the rendered-fidelity gate.
  *
- * MEASURES the computed result of the preview harness in a real, headless browser.
+ * MEASURES the computed result of an item's specimen page in a real, headless browser.
  * It NEVER reads the frozen Figma ref, so it cannot call drift: it reports numbers
  * and an exit code, and the CHECKER compares them to the ref. Keeping mechanism and
  * judgment apart is what stops the gate from grading itself.
  *
- * Run it from the PROJECT ROOT; it starts and stops the preview server itself.
+ * Run it from the PROJECT ROOT. Repo pages are served from a virtual origin — no port.
  *
  *   node build/gate/measure-fidelity.mjs \
- *     --probes     loop/refs/<item-id>/probes.json \
- *     --out        loop/refs/<item-id>/measurements.json \
- *     --screenshot loop/refs/<item-id>/rendered.png
+ *     --probes     specs/components/<item-id>/probes.json \
+ *     --out        specs/components/<item-id>/measurements.json \
+ *     --screenshot review/<item-id>/rendered.png
+ *
+ * With no --url it (re)builds review/<item-id>/specimen.html from the item's specimen.html and
+ * measures that. It refuses a dist/theme.css older than its sources (exit 4).
  *
  * Exit codes — the checker reads these BEFORE it reads any number:
  *   0  every probe measured            -> compare to the ref: PASS or DRIFT
@@ -27,9 +30,11 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
 import { chromium } from 'playwright-core';
+import { projectConfig } from '../lib/project-config.mjs';
+import { serveRepo, urlFor } from '../lib/virtual-origin.mjs';
+import { itemFromPath } from '../lib/specs.mjs';
+import { writeSpecimenPage, SpecimenError } from '../review/specimen-page.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -43,6 +48,39 @@ const EXIT_NO_BROWSER = 4;
  * describing a page nobody will ever see. A 404 here invalidates the whole viewport. */
 const CRITICAL_RESOURCES = new Set(['stylesheet', 'font', 'script']);
 
+/* ONE EXEMPTION, and it is structural rather than a tolerance.
+ *
+ * A self-hosted webfont in the theme points at an ODC Resource — `/<odcThemeModule>/x.woff2`
+ * — and ODC REWRITES that src at compile time. The authored path is not the shipped path, so
+ * it CANNOT resolve in this harness: there is no ODC here to do the rewriting. A 404 on it is
+ * the expected, permanent state of a correct theme (specs/foundations/platform.md §7), not a broken build.
+ *
+ * Left unexempted, the rule above is self-defeating: the first project to self-host a font
+ * invalidates every viewport forever and the gate stops measuring anything. That is worse
+ * than the failure it protects against, because a gate that always fails is a gate nobody
+ * reads.
+ *
+ * Why it is safe to exempt THIS and nothing else. A missing stylesheet poisons every number
+ * on the page — the whole cascade falls back. A missing font poisons only text metrics, and
+ * it does so by falling back to the same face the harness has always measured, so the
+ * baseline still describes exactly the page the harness renders. Fonts NOT under the theme
+ * prefix stay critical: one that should resolve locally and does not is a real fault.
+ *
+ * The failure is still recorded in failedRequests with critical:false — exempt means "does
+ * not invalidate", never "hidden". Read the module name from config, never restate it
+ * (CLAUDE.md hard rule 8). */
+const THEME_RESOURCE_PREFIX = '/' + projectConfig().odcThemeModule + '/';
+
+function isCritical(resourceType, url) {
+  if (!CRITICAL_RESOURCES.has(resourceType)) return false;
+  if (resourceType !== 'font') return true;
+  try {
+    return !new URL(url).pathname.startsWith(THEME_RESOURCE_PREFIX);
+  } catch {
+    return true; // unparseable URL: treat as critical rather than quietly excusing it
+  }
+}
+
 const CHANNELS = ['chrome', 'msedge', 'chromium'];
 
 /* Determinism knobs. --hide-scrollbars keeps widths equal to the design's own
@@ -55,7 +93,7 @@ const LAUNCH_ARGS = [
 ];
 
 function parseArgs(argv) {
-  const out = { probes: null, out: null, screenshot: null, url: null, port: null, timeout: 15000 };
+  const out = { probes: null, out: null, screenshot: null, url: null, timeout: 15000 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -63,7 +101,6 @@ function parseArgs(argv) {
     else if (a === '--out') out.out = next();
     else if (a === '--screenshot') out.screenshot = next();
     else if (a === '--url') out.url = next();
-    else if (a === '--port') out.port = Number(next());
     else if (a === '--timeout') out.timeout = Number(next());
     else if (a === '--help' || a === '-h') out.help = true;
     else if (a.startsWith('--')) out.unknown = a;
@@ -74,31 +111,6 @@ function parseArgs(argv) {
 function die(code, msg) {
   console.error('measure-fidelity: ' + msg);
   process.exit(code);
-}
-
-async function freePort() {
-  return new Promise((res, rej) => {
-    const s = createServer();
-    s.on('error', rej);
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address();
-      s.close(() => res(port));
-    });
-  });
-}
-
-async function waitForServer(url, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(url, { redirect: 'manual' });
-      if (r.status < 500) return true;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 120));
-  }
-  return false;
 }
 
 async function launchBrowser() {
@@ -291,7 +303,17 @@ async function main() {
       ? spec.viewports
       : [{ name: 'desktop', width: 1280, height: 900 }];
 
-  const pagePath = args.url || spec.url || '/preview/index.html';
+  let pagePath = args.url || spec.url;
+  if (!pagePath) {
+    const item = itemFromPath(resolve(args.probes));
+    if (!item) die(EXIT_USAGE, 'probe file is not inside specs/<kind>/<item-id>/ and declares no url');
+    try {
+      pagePath = writeSpecimenPage(item);
+    } catch (e) {
+      if (e instanceof SpecimenError) die(EXIT_NO_BROWSER, e.message);
+      throw e;
+    }
+  }
   const isAbsolute = /^https?:\/\//i.test(pagePath);
 
   /* --- browser first: no browser is exit 4 and nothing else matters --- */
@@ -306,33 +328,9 @@ async function main() {
   const browser = launched.browser;
   const channel = launched.channel;
 
-  /* --- preview server --- */
-  let server = null;
-  let baseUrl = null;
-  if (isAbsolute) {
-    baseUrl = pagePath;
-  } else {
-    const port = args.port || (await freePort());
-    server = spawn(process.execPath, [join(ROOT, 'build', 'preview-server.mjs')], {
-      cwd: ROOT,
-      env: { ...process.env, PORT: String(port), PREVIEW_NO_OPEN: '1' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let serverErr = '';
-    server.stderr.on('data', (d) => {
-      serverErr += d.toString();
-    });
-    baseUrl =
-      'http://127.0.0.1:' + port + (pagePath.startsWith('/') ? pagePath : '/' + pagePath);
-    const up = await waitForServer('http://127.0.0.1:' + port + '/preview/index.html', 10000);
-    if (!up) {
-      server.kill();
-      await browser.close().catch(() => {});
-      console.error('measure-fidelity: preview server never came up on port ' + port + '.');
-      if (serverErr.trim()) console.error(serverErr.trim());
-      process.exit(EXIT_NO_BROWSER);
-    }
-  }
+  /* Repo-relative pages are served from a virtual origin inside the browser context: no
+   * port is bound, so there is nothing to collide with. */
+  const baseUrl = isAbsolute ? pagePath : urlFor(pagePath);
 
   const pwVersion = JSON.parse(
     readFileSync(join(ROOT, 'node_modules', 'playwright-core', 'package.json'), 'utf8')
@@ -368,6 +366,7 @@ async function main() {
         deviceScaleFactor: 1,
         reducedMotion: 'reduce',
       });
+      if (!isAbsolute) await serveRepo(context);
       const page = await context.newPage();
 
       /* Chromium reports a 404 twice: once as a response, once as an aborted
@@ -384,7 +383,7 @@ async function main() {
           url: r.url(),
           resourceType: r.resourceType(),
           reason: (r.failure() && r.failure().errorText) || 'request failed',
-          critical: CRITICAL_RESOURCES.has(r.resourceType()),
+          critical: isCritical(r.resourceType(), r.url()),
         });
       });
       page.on('response', (r) => {
@@ -394,7 +393,7 @@ async function main() {
             url: r.url(),
             resourceType: type,
             reason: 'HTTP ' + r.status(),
-            critical: CRITICAL_RESOURCES.has(type),
+            critical: isCritical(type, r.url()),
           });
         }
       });
@@ -410,6 +409,37 @@ async function main() {
       }
 
       if (loaded) {
+        /* WAIT FOR WEBFONTS, or every text measurement is a coin toss.
+         *
+         * `waitUntil: 'load'` covers stylesheets but NOT the font files a stylesheet asks
+         * for: those are fetched lazily, when text first needs them, and they land after
+         * `load` has already fired. Measure before they arrive and the probe records the
+         * FALLBACK face — a real number, describing a frame the user never sees, that
+         * changes run to run with the network. A flaky gate is worse than a red one,
+         * because the first green re-run teaches everyone to re-run.
+         *
+         * document.fonts.ready settles once every pending face has loaded or failed. It
+         * resolves either way, so a font that legitimately cannot load (a self-hosted ODC
+         * path, which never resolves in this harness) does not hang the run — it just
+         * stops racing us. Bounded, because a hung CDN must not become a hung gate.
+         *
+         * Every declared face is requested first. Otherwise a face loads only if some text on
+         * the page happens to use it, and a probe that sets that weight itself measures the
+         * fallback on a page with no bold copy and Roboto on a page with some. */
+        try {
+          await page.evaluate(
+            (ms) => {
+              if (!document.fonts || !document.fonts.ready) return undefined;
+              document.fonts.forEach((f) => { if (f.status === 'unloaded') f.load().catch(() => {}); });
+              return Promise.race([
+                document.fonts.ready.then(() => undefined),
+                new Promise((r) => setTimeout(r, ms)),
+              ]);
+            },
+            args.timeout,
+          );
+        } catch { /* no FontFaceSet, or it rejected: measure what is there */ }
+
         if (spec.waitFor) {
           try {
             await page.waitForSelector(spec.waitFor, { timeout: args.timeout, state: 'attached' });
@@ -471,7 +501,6 @@ async function main() {
     }
   } finally {
     await browser.close().catch(() => {});
-    if (server) server.kill();
   }
 
   const all = report.viewports.flatMap((v) => v.probes);

@@ -14,7 +14,7 @@
  * building component #9.
  *
  *   node build/gate/compare-measurements.mjs --baseline a.json --current b.json
- *   node build/gate/compare-measurements.mjs --all        # every loop/refs/<id>/
+ *   node build/gate/compare-measurements.mjs --all        # every specs/<kind>/<id>/
  *
  * THE COMPARISON IS TYPED BY STABILITY, and that detail is load-bearing:
  *
@@ -39,9 +39,10 @@
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { allItems, specDir } from '../lib/specs.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -51,7 +52,7 @@ const EXIT_USAGE = 2;
 
 /* Geometry is compared with a tolerance, in CSS px. Anything at or under this is
  * rasterisation noise, not a change. */
-const DEFAULT_TOLERANCE = 1.5;
+export const DEFAULT_TOLERANCE = 1.5;
 
 function parseArgs(argv) {
   const out = { baseline: null, current: null, all: false, tolerance: DEFAULT_TOLERANCE, json: null };
@@ -93,7 +94,7 @@ function indexProbes(report) {
   return map;
 }
 
-function compare(baseline, current, tolerance) {
+export function compare(baseline, current, tolerance = DEFAULT_TOLERANCE) {
   const findings = [];
   const push = (severity, key, detail) => findings.push({ severity, key, ...detail });
 
@@ -219,18 +220,10 @@ function main() {
   let totalRegressions = 0;
 
   if (args.all) {
-    const refsDir = join(ROOT, 'loop', 'refs');
-    if (!existsSync(refsDir)) {
-      console.log('compare-measurements: no loop/refs/ yet — nothing to regress against.');
-      process.exit(EXIT_OK);
-    }
-    const items = readdirSync(refsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-      .filter((name) =>
-        existsSync(join(refsDir, name, 'probes.json')) &&
-        existsSync(join(refsDir, name, 'measurements.json'))
-      );
+    const items = allItems().filter((id) =>
+      existsSync(join(ROOT, specDir(id), 'probes.json')) &&
+      existsSync(join(ROOT, specDir(id), 'measurements.json'))
+    );
 
     if (!items.length) {
       console.log('compare-measurements: no item has both probes.json and measurements.json yet — nothing to regress against.');
@@ -240,8 +233,8 @@ function main() {
     console.log('compare-measurements: re-measuring ' + items.length + ' item(s) against their committed baselines.');
 
     for (const item of items) {
-      const probes = join(refsDir, item, 'probes.json');
-      const baselinePath = join(refsDir, item, 'measurements.json');
+      const probes = join(ROOT, specDir(item), 'probes.json');
+      const baselinePath = join(ROOT, specDir(item), 'measurements.json');
       const currentPath = join(tmpdir(), 'gate-current-' + item + '.json');
 
       const run = spawnSync(
@@ -289,4 +282,4 @@ function main() {
   process.exit(totalRegressions ? EXIT_REGRESSION : EXIT_OK);
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
