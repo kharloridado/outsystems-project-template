@@ -21,3 +21,15 @@ component, not for the person who wrote the commit — say what changed in the r
 and what they have to re-paste.
 
 ## [Unreleased]
+
+### Added
+
+- **Mentor guide: structural handovers.** `handover/MENTOR-STUDIO-PROMPT.md` gains a method for
+  prompts that restructure a Layout or shared `Common` Blocks: start from the live DOM, give Mentor
+  the target HTML with a widget legend ("build real widgets, never paste this HTML"), keep the
+  prompt self-contained (Mentor sees the module, not the repo; imported `specs/` Markdown only once
+  proven), placeholders over containers, one prompt per module in build order (theme module, then
+  each consumer app), and verify the published page before sending a short delta prompt.
+- **Several Mentor prompts per handover.** A `handover-map.json` entry may give
+  `mentor.prompts: [{ title, text }, …]`; `npm run embed:handover` renders each as its own
+  subsection, for changes that span the theme module and consumer apps.

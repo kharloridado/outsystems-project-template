@@ -19,6 +19,8 @@
  * (Web Component / native-widget restyle / Style-Guide reference).
  *
  * `mentor: { text: "…" }` is the escape hatch: the prompt is taken VERBATIM from the map.
+ * `mentor: { prompts: [{ title, text }, …] }` renders several verbatim prompts, one subsection each,
+ * for a change that spans modules (the theme module first, then each consumer app).
  * It exists because the derived prompts each describe one archetype, and a component whose
  * ODC side is a hand-built Block of native widgets — inputs, events, a Client Action — is
  * none of them. Without it the only way to keep such a prompt is to hand-edit the handover,
@@ -511,6 +513,17 @@ function mentorPrompt(md, entry) {
 }
 
 function mentorSection(md, entry) {
+  const prompts = entry.mentor && entry.mentor.prompts;
+  if (prompts) {
+    return [
+      MENTOR_MARKER,
+      ``,
+      `> Paste each prompt into **ODC Mentor Studio** in the module it names, in this order. Mentor`,
+      `> does **not** author the CSS, so paste the theme first (see the checklist). Reusable template +`,
+      `> notes: \`handover/MENTOR-STUDIO-PROMPT.md\`.`,
+      ...prompts.flatMap((p) => [``, `### ${p.title}`, ``, "```", p.text, "```"]),
+    ].join("\n");
+  }
   return [
     MENTOR_MARKER,
     ``,
