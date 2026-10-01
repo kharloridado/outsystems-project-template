@@ -23,6 +23,8 @@
     "gate:compare": "node build/gate/compare-measurements.mjs",
     "gate:regression": "node build/gate/compare-measurements.mjs --all",
     "embed:handover": "node build/embed-handover-code.mjs",
+    "docs:odc": "node build/odc-docs.mjs",
+    "docs:odc:record": "node build/odc-docs.mjs --record",
     "board:advance": "./loop/board-run.sh advance",
     "board:ship": "./loop/board-run.sh ship",
     "board:sync": "./loop/board-run.sh sync"

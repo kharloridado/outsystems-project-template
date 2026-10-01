@@ -30,6 +30,10 @@ and what they have to re-paste.
   prompt self-contained (Mentor sees the module, not the repo; imported `specs/` Markdown only once
   proven), placeholders over containers, one prompt per module in build order (theme module, then
   each consumer app), and verify the published page before sending a short delta prompt.
+- **Design-system docs for ODC, as part of every release.** `npm run docs:odc` packages the
+  agent-readable `specs/` Markdown for import into ODC as Resources — context for Mentor and for
+  anyone using the Live Style Guide — flattened and link-rewritten. Each release ships everything
+  and a zip of only what is new or changed since the last import (`handover/odc-docs-imported.json`).
 - **Several Mentor prompts per handover.** A `handover-map.json` entry may give
   `mentor.prompts: [{ title, text }, …]`; `npm run embed:handover` renders each as its own
   subsection, for changes that span the theme module and consumer apps.

@@ -66,6 +66,7 @@ CHANGELOG.md      release notes — the one file the owner reads; write entries 
 | `npm run gate:measure -- --probes <specs/…/probes.json>` | Measure one item's specimen page. |
 | `npm run gate:regression` | Re-measure every item against its committed baseline (CI). |
 | `npm run embed:handover` | Re-embed source CSS/JS into `handover/*.md` after editing a handed-over file. |
+| `npm run docs:odc` | Package the `specs/` Markdown for import into ODC: `dist/odc-docs-<v>.zip` (all) and `-changed.zip` (new or changed since the last import, per `handover/odc-docs-imported.json`). `docs:odc:record` marks the current set as imported. |
 | `npm run board:advance \| board:ship \| board:sync` | Board mode (below). |
 | `npm run init` | Fill `project.config.json` for a new engagement. |
 
@@ -182,8 +183,13 @@ runs locally; `board-ship` needs neither. A scheduled run gets its own worktree
    Added / Changed / Fixed, with component scope and PR/issue refs, written for the owner.
 3. `npm run build:theme:ship` and confirm the head of `dist/theme.css` reads the new version.
    **That file is the ODC paste** — `build:theme` writes an annotated dev copy to the same path.
-4. `npm run review`, and republish the library review Artifact.
-5. `npm run build:theme` to restore the dev copy, then commit `release: vx.y.z`, tag and push.
+4. `npm run docs:odc` — the design-system Markdown for ODC. Import `dist/odc-docs-<v>-changed.zip`
+   into the theme module's Resources (and the Live Style Guide where it renders them); delete any
+   Resource the script lists as no longer produced. Nothing changed means nothing to import. Then
+   `npm run docs:odc:record`. Attach both zips to the release.
+5. `npm run review`, and republish the library review Artifact.
+6. `npm run build:theme` to restore the dev copy, then commit `release: vx.y.z` (with
+   `handover/odc-docs-imported.json`), tag and push.
 
 Only Approved work is released; releases are manual by design.
 
